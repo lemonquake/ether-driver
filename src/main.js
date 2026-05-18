@@ -39,6 +39,21 @@ let activeGarageCategory = 'chassis';
 let activeSetupStep = 'team';
 let garageFlash = { part: null, timer: 0 };
 const pendingTeamColors = {};
+let activeColorPickerTeamId = null;
+const presetColors = [
+  '#82ffcf', // Aurora Mint
+  '#ff5f7d', // Crimson Pink
+  '#ffcc66', // Volt Gold
+  '#b991ff', // Phantom Violet
+  '#33bbff', // Sky Blue
+  '#ff8233', // Neon Orange
+  '#55ff55', // Acid Green
+  '#ff2200', // Crimson Red
+  '#ff00ff', // Hot Pink
+  '#ffd700', // Gold
+  '#00ffcc', // Aqua
+  '#ffffff'  // Pure White
+];
 const partSnapshotCache = new Map();
 let partSnapshotRenderer = null;
 const garageCategories = [
@@ -111,8 +126,10 @@ function renderTeamBuilder() {
   ui.teamCountButtons.forEach((button) => {
     button.classList.toggle('selected', Number(button.dataset.teamCount) === setupTeamCount);
   });
-  ui.teamBuilder.innerHTML = setupTeams.map((team) => `
-    <article class="team-card ${team.id === setupPlayerTeamId ? 'selected' : ''}" style="--team-color:${pendingTeamColors[team.id] || team.color}" data-team-id="${team.id}">
+  ui.teamBuilder.innerHTML = setupTeams.map((team) => {
+    const isPickerActive = activeColorPickerTeamId === team.id;
+    return `
+    <article class="team-card ${team.id === setupPlayerTeamId ? 'selected' : ''} ${isPickerActive ? 'has-picker' : ''}" style="--team-color:${pendingTeamColors[team.id] || team.color}" data-team-id="${team.id}">
       <button class="team-flag" type="button" data-team-flag="${team.id}" aria-label="Join ${esc(team.name)}">
         <span>${esc(team.flagLabel)}</span>
       </button>
@@ -120,10 +137,32 @@ function renderTeamBuilder() {
         <span>Team Name</span>
         <input data-team-name="${team.id}" maxlength="16" value="${esc(team.name)}" />
       </label>
-      <label>
+      
+      <div class="team-color-section">
         <span>Color</span>
-        <input type="color" data-team-color="${team.id}" value="${pendingTeamColors[team.id] || team.color}" />
-      </label>
+        <div class="team-color-trigger-row">
+          <button type="button" class="team-color-trigger" data-team-color-trigger="${team.id}" style="background-color: ${pendingTeamColors[team.id] || team.color}" aria-label="Open color picker"></button>
+          <span class="team-color-hex-label">${(pendingTeamColors[team.id] || team.color).toUpperCase()}</span>
+        </div>
+        
+        ${isPickerActive ? `
+        <div class="team-color-picker-panel">
+          <div class="preset-swatches">
+            ${presetColors.map((c) => `
+              <button type="button" class="color-swatch ${c === (pendingTeamColors[team.id] || team.color) ? 'selected' : ''}" data-team-swatch="${team.id}" data-color="${c}" style="background-color: ${c}" aria-label="Select color ${c}"></button>
+            `).join('')}
+          </div>
+          <div class="custom-color-row">
+            <div class="custom-color-input-wrapper">
+              <input type="color" data-team-custom-color="${team.id}" value="${pendingTeamColors[team.id] || team.color}" aria-label="Custom color picker" />
+              <input type="text" data-team-custom-hex="${team.id}" value="${(pendingTeamColors[team.id] || team.color).toUpperCase()}" maxlength="7" aria-label="Custom color hex" />
+            </div>
+            <button type="button" class="team-color-accept-btn" data-team-color-accept="${team.id}">OK</button>
+          </div>
+        </div>
+        ` : ''}
+      </div>
+
       <div class="team-size-stepper">
         <span>Players</span>
         <button type="button" data-team-dec="${team.id}">-</button>
@@ -132,7 +171,8 @@ function renderTeamBuilder() {
       </div>
       <p>${team.id === setupPlayerTeamId ? 'Your squad' : 'AI squad'}</p>
     </article>
-  `).join('');
+    `;
+  }).join('');
 }
 
 function setTeamCount(count) {
@@ -689,27 +729,78 @@ ui.teamBuilder.addEventListener('click', (event) => {
   const flag = event.target.closest('[data-team-flag]');
   const dec = event.target.closest('[data-team-dec]');
   const inc = event.target.closest('[data-team-inc]');
+  const colorTrigger = event.target.closest('[data-team-color-trigger]');
+  const swatch = event.target.closest('[data-team-swatch]');
+  const acceptBtn = event.target.closest('[data-team-color-accept]');
+
   if (flag) setupPlayerTeamId = flag.dataset.teamFlag;
   if (dec || inc) {
     const id = (dec || inc).dataset.teamDec || (dec || inc).dataset.teamInc;
     const team = setupTeams.find((item) => item.id === id);
     team.playerCount = Math.max(1, Math.min(7, team.playerCount + (inc ? 1 : -1)));
   }
+  if (colorTrigger) {
+    const id = colorTrigger.dataset.teamColorTrigger;
+    activeColorPickerTeamId = activeColorPickerTeamId === id ? null : id;
+  }
+  if (swatch) {
+    const id = swatch.dataset.teamSwatch;
+    const color = swatch.dataset.color;
+    const team = setupTeams.find((item) => item.id === id);
+    pendingTeamColors[id] = color;
+    if (team) team.color = color;
+    event.target.closest('.team-card')?.style.setProperty('--team-color', color);
+  }
+  if (acceptBtn) {
+    activeColorPickerTeamId = null;
+  }
   renderTeamBuilder();
 });
 ui.teamBuilder.addEventListener('input', (event) => {
   const nameId = event.target.dataset.teamName;
-  const colorId = event.target.dataset.teamColor;
+  const customColorId = event.target.dataset.teamCustomColor;
+  const customHexId = event.target.dataset.teamCustomHex;
+
   if (nameId) setupTeams.find((team) => team.id === nameId).name = event.target.value || 'Team';
-  if (colorId) {
-    const team = setupTeams.find((item) => item.id === colorId);
-    pendingTeamColors[colorId] = event.target.value;
+  if (customColorId) {
+    const team = setupTeams.find((item) => item.id === customColorId);
+    pendingTeamColors[customColorId] = event.target.value;
     if (team) team.color = event.target.value;
+    
+    const triggerBtn = event.target.closest('.team-card')?.querySelector('.team-color-trigger');
+    if (triggerBtn) triggerBtn.style.backgroundColor = event.target.value;
+    
+    const hexLabel = event.target.closest('.team-card')?.querySelector('.team-color-hex-label');
+    if (hexLabel) hexLabel.textContent = event.target.value.toUpperCase();
+    
+    const textInput = event.target.closest('.custom-color-input-wrapper')?.querySelector('input[type="text"]');
+    if (textInput) textInput.value = event.target.value.toUpperCase();
+    
     event.target.closest('.team-card')?.style.setProperty('--team-color', event.target.value);
+  }
+  if (customHexId) {
+    let val = event.target.value;
+    if (!val.startsWith('#')) val = '#' + val;
+    if (/^#[0-9a-f]{6}$/i.test(val)) {
+      const team = setupTeams.find((item) => item.id === customHexId);
+      pendingTeamColors[customHexId] = val;
+      if (team) team.color = val;
+      
+      const triggerBtn = event.target.closest('.team-card')?.querySelector('.team-color-trigger');
+      if (triggerBtn) triggerBtn.style.backgroundColor = val;
+      
+      const hexLabel = event.target.closest('.team-card')?.querySelector('.team-color-hex-label');
+      if (hexLabel) hexLabel.textContent = val.toUpperCase();
+      
+      const colorInput = event.target.closest('.custom-color-input-wrapper')?.querySelector('input[type="color"]');
+      if (colorInput) colorInput.value = val;
+      
+      event.target.closest('.team-card')?.style.setProperty('--team-color', val);
+    }
   }
 });
 ui.teamBuilder.addEventListener('change', (event) => {
-  if (event.target.dataset.teamName || event.target.dataset.teamColor) renderTeamBuilder();
+  if (event.target.dataset.teamName) renderTeamBuilder();
 });
 ui.garageControls.addEventListener('click', (event) => {
   const categoryButton = event.target.closest('[data-garage-category]');

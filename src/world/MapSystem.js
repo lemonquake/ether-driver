@@ -104,7 +104,58 @@ function addLamp(ctx, materials, x, z) {
   ctx.scene.add(light);
 }
 
+function addTurboTile(ctx, materials, x, z, yaw) {
+  const group = new THREE.Group();
+  
+  const base = new THREE.Mesh(new THREE.BoxGeometry(6, 0.1, 8), materials.concrete);
+  base.position.y = 0.05;
+  group.add(base);
+
+  const glowMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xffaa00, emissiveIntensity: 2.5, transparent: true, opacity: 0.8 });
+  const arrow1 = new THREE.Mesh(new THREE.ConeGeometry(2, 2, 3), glowMat);
+  arrow1.rotation.x = -Math.PI / 2;
+  arrow1.position.set(0, 0.15, 1);
+  const arrow2 = new THREE.Mesh(new THREE.ConeGeometry(2, 2, 3), glowMat);
+  arrow2.rotation.x = -Math.PI / 2;
+  arrow2.position.set(0, 0.15, -1.5);
+
+  group.add(arrow1, arrow2);
+  
+  group.position.set(x, 0.02, z);
+  group.rotation.y = yaw;
+  ctx.scene.add(group);
+  
+  if (!ctx.specialTiles) ctx.specialTiles = [];
+  ctx.specialTiles.push({ type: 'turbo', x, z, w: 6, d: 8, yaw, mesh: group, glowMat, animOffset: Math.random() * Math.PI });
+}
+
+function addJumpTile(ctx, materials, x, z, yaw) {
+  const group = new THREE.Group();
+  
+  const base = new THREE.Mesh(new THREE.BoxGeometry(6, 0.1, 6), materials.concrete);
+  base.position.y = 0.05;
+  group.add(base);
+
+  const glowMat = new THREE.MeshStandardMaterial({ color: 0x00ffcc, emissive: 0x00ffcc, emissiveIntensity: 2.0, transparent: true, opacity: 0.8 });
+  const circle = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.3, 16, 32), glowMat);
+  circle.rotation.x = -Math.PI / 2;
+  circle.position.y = 0.15;
+  
+  const core = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 0.2, 16), glowMat);
+  core.position.y = 0.15;
+
+  group.add(circle, core);
+
+  group.position.set(x, 0.02, z);
+  group.rotation.y = yaw;
+  ctx.scene.add(group);
+  
+  if (!ctx.specialTiles) ctx.specialTiles = [];
+  ctx.specialTiles.push({ type: 'jump', x, z, w: 6, d: 6, yaw, mesh: group, glowMat, animOffset: Math.random() * Math.PI });
+}
+
 export function buildMap(ctx, materials) {
+  ctx.specialTiles = [];
   const hemi = new THREE.HemisphereLight(0x9ed7ff, 0x314329, 1.35);
   ctx.scene.add(hemi);
   const sun = new THREE.DirectionalLight(0xfff0c7, 3.1);
@@ -162,6 +213,16 @@ export function buildMap(ctx, materials) {
   for (let z = -155; z <= 155; z += 62) addLamp(ctx, materials, -17, z);
   for (let x = -155; x <= 155; x += 62) addLamp(ctx, materials, x, 17);
 
+  addTurboTile(ctx, materials, 0, 80, 0);
+  addTurboTile(ctx, materials, 0, -80, Math.PI);
+  addTurboTile(ctx, materials, 80, 0, Math.PI / 2);
+  addTurboTile(ctx, materials, -80, 0, -Math.PI / 2);
+  
+  addJumpTile(ctx, materials, 0, 110, 0);
+  addJumpTile(ctx, materials, 0, -110, 0);
+  addJumpTile(ctx, materials, 110, 0, 0);
+  addJumpTile(ctx, materials, -110, 0, 0);
+
   ctx.pickups.push(
     { x: -86, z: 0, weapon: 'swarm-missiles' },
     { x: 86, z: 0, weapon: 'rail-slug' },
@@ -175,6 +236,13 @@ export function buildMap(ctx, materials) {
     { x: -50, z: -50, weapon: 'armor-pack' },
     { x: 50, z: 50, weapon: 'tool-box' },
     { x: -50, z: 50, weapon: 'speed-booster' },
-    { x: 50, z: -50, weapon: 'health-kit' }
+    { x: 50, z: -50, weapon: 'health-kit' },
+    // New Weapons
+    { x: 100, z: 100, weapon: 'phantom-seeker' },
+    { x: -100, z: -100, weapon: 'plasma-wraith' },
+    { x: -100, z: 100, weapon: 'magma-drone' },
+    { x: 100, z: -100, weapon: 'volt-hunter' },
+    { x: -130, z: 0, weapon: 'void-stalker' },
+    { x: 130, z: 0, weapon: 'void-stalker' }
   );
 }

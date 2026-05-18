@@ -89,6 +89,44 @@ const icons = {
     <circle cx="16" cy="10" r="2" fill="#fff" opacity="0.3"/>
     <path d="M8 6l2 3M24 6l-2 3M6 14h3M23 14h3" stroke="#ff6600" stroke-width="1" opacity="0.5"/>
   </svg>`,
+
+  'phantom-seeker': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+    <defs><linearGradient id="ps" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#cc88ff"/><stop offset="100%" stop-color="#aa44ff"/></linearGradient></defs>
+    <path d="M16 4l-4 8v8l4 8 4-8v-8z" fill="url(#ps)" opacity="0.85" stroke="#cc88ff" stroke-width="1"/>
+    <circle cx="16" cy="12" r="2" fill="#fff" opacity="0.6"/>
+    <path d="M10 16l-4 4 4 4M22 16l4 4-4 4" stroke="#cc88ff" stroke-width="1.5" stroke-linecap="round" fill="none" opacity="0.6"/>
+  </svg>`,
+
+  'plasma-wraith': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+    <defs><radialGradient id="pw"><stop offset="0%" stop-color="#88ffee"/><stop offset="100%" stop-color="#00ffcc"/></radialGradient></defs>
+    <path d="M16 6a6 6 0 0 1 6 6v8l-6 6-6-6v-8a6 6 0 0 1 6-6" fill="url(#pw)" opacity="0.8"/>
+    <circle cx="12" cy="14" r="1.5" fill="#1a3333"/>
+    <circle cx="20" cy="14" r="1.5" fill="#1a3333"/>
+    <path d="M16 26q-4 4-8 0" stroke="#00ffcc" stroke-width="1.5" fill="none" opacity="0.6"/>
+    <path d="M16 26q4 4 8 0" stroke="#00ffcc" stroke-width="1.5" fill="none" opacity="0.6"/>
+  </svg>`,
+
+  'magma-drone': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+    <defs><radialGradient id="md"><stop offset="0%" stop-color="#ff8833"/><stop offset="100%" stop-color="#ff4400"/></radialGradient></defs>
+    <path d="M16 8l8 6v8l-8 6-8-6v-8z" fill="url(#md)" stroke="#ff4400" stroke-width="1.2"/>
+    <circle cx="16" cy="16" r="3" fill="#ffccaa"/>
+    <path d="M16 8v-4M24 14l4-2M24 22l4 2M16 24v4M8 22l-4 2M8 14l-4-2" stroke="#ff8833" stroke-width="1.5" opacity="0.7"/>
+  </svg>`,
+
+  'volt-hunter': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+    <defs><linearGradient id="vh" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#eeff88"/><stop offset="100%" stop-color="#ccff00"/></linearGradient></defs>
+    <path d="M18 2L8 16h6l-2 14 12-16h-6l2-12z" fill="url(#vh)" stroke="#ccff00" stroke-width="1"/>
+    <circle cx="16" cy="16" r="8" fill="none" stroke="#eeff88" stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>
+  </svg>`,
+
+  'void-stalker': `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+    <defs><radialGradient id="vs"><stop offset="0%" stop-color="#6633aa"/><stop offset="80%" stop-color="#330066"/><stop offset="100%" stop-color="#110022"/></radialGradient></defs>
+    <circle cx="16" cy="16" r="12" fill="url(#vs)"/>
+    <circle cx="16" cy="16" r="6" fill="#110022"/>
+    <path d="M16 10v12M10 16h12" stroke="#6633aa" stroke-width="2" opacity="0.8"/>
+    <circle cx="16" cy="16" r="2" fill="#cc88ff"/>
+    <path d="M16 2a14 14 0 0 0 0 28M16 30a14 14 0 0 0 0-28" stroke="#6633aa" stroke-width="1.5" fill="none" opacity="0.5" stroke-dasharray="3 4"/>
+  </svg>`,
 };
 
 export function getWeaponIcon(weaponId) {

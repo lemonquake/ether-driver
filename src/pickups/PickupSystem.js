@@ -2,6 +2,33 @@ import * as THREE from 'three';
 import { distance2D } from '../core/collision.js';
 import { weaponCatalog } from '../data/weapons.js';
 
+function createPickupLabel(text, colorHex) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 256;
+  canvas.height = 64;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(10, 15, 20, 0.7)';
+  ctx.strokeStyle = colorHex;
+  ctx.lineWidth = 2;
+  ctx.roundRect(4, 4, 248, 56, 12);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = colorHex;
+  ctx.font = 'bold 20px Inter, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('PICK UP', 128, 28);
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 16px Inter, sans-serif';
+  ctx.fillText(text.toUpperCase(), 128, 48);
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.set(3, 0.75, 1);
+  sprite.position.set(0, 2.5, 0);
+  return sprite;
+}
+
 export function createPickups(ctx, physics) {
   ctx.pickups.forEach((pickup, index) => {
     const weapon = weaponCatalog[pickup.weapon];
@@ -63,7 +90,19 @@ export function createPickups(ctx, physics) {
     } else {
       core = new THREE.Mesh(new THREE.OctahedronGeometry(0.75, 0), material);
     }
+    
     group.add(core);
+    group.scale.set(1.5, 1.5, 1.5);
+    
+    const glowRing = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.05, 8, 32), new THREE.MeshStandardMaterial({ color: weapon.color, emissive: weapon.color, emissiveIntensity: 2.0, transparent: true, opacity: 0.6 }));
+    glowRing.rotation.x = Math.PI / 2;
+    group.add(glowRing);
+
+    const colorHex = `#${weapon.color.toString(16).padStart(6, '0')}`;
+    const labelSprite = createPickupLabel(weapon.name, colorHex);
+    labelSprite.visible = false;
+    group.add(labelSprite);
+
     group.position.set(pickup.x, 0.9, pickup.z);
     ctx.scene.add(group);
     const sensor = physics.createSensorSphere(2.2, pickup.x, 0.9, pickup.z);
@@ -71,7 +110,7 @@ export function createPickups(ctx, physics) {
       id: `pickup-${index}`,
       pickup: { weaponId: pickup.weapon, respawn: 0, radius: 2.6 },
       transform: { x: pickup.x, y: 0.9, z: pickup.z },
-      renderable: { group },
+      renderable: { group, glowRing, labelSprite },
       rapierBody: sensor,
     });
   });
@@ -110,8 +149,24 @@ export function updatePickups(ctx, dt) {
     const enabled = isUtility || !ctx.match?.enabledWeapons || ctx.match.enabledWeapons.has(pickup.pickup.weaponId);
     pickup.pickup.respawn = Math.max(0, pickup.pickup.respawn - dt);
     pickup.renderable.group.visible = enabled && pickup.pickup.respawn <= 0;
-    pickup.renderable.group.rotation.y += dt * 1.7;
-    pickup.renderable.group.position.y = 0.9 + Math.sin(performance.now() * 0.004) * 0.18;
+    
+    if (pickup.renderable.group.visible) {
+      pickup.renderable.group.rotation.y += dt * 1.7;
+      pickup.renderable.group.position.y = 0.9 + Math.sin(performance.now() * 0.004) * 0.18;
+      
+      const pulse = 1.2 + Math.sin(performance.now() * 0.005) * 0.3;
+      if (pickup.renderable.glowRing) pickup.renderable.glowRing.scale.set(pulse, pulse, pulse);
+      
+      const playerDist = ctx.player && !ctx.player.health.dead ? distance2D(ctx.player.transform, pickup.transform) : 999;
+      if (pickup.renderable.labelSprite && ctx.camera) {
+        pickup.renderable.labelSprite.visible = playerDist < 15;
+        if (playerDist < 15) {
+          pickup.renderable.labelSprite.position.y = 1.8 + Math.sin(performance.now() * 0.008) * 0.2;
+          pickup.renderable.labelSprite.quaternion.copy(ctx.camera.quaternion);
+        }
+      }
+    }
+
     if (!enabled || pickup.pickup.respawn > 0) continue;
     for (const vehicle of ctx.ecs.entities.filter((e) => e.vehicle && !e.health.dead)) {
       if (distance2D(vehicle.transform, pickup.transform) > pickup.pickup.radius) continue;
@@ -138,6 +193,12 @@ export function updatePickups(ctx, dt) {
             ammo: randomWep.ammo,
             cooldown: 0,
           };
+          if (vehicle === ctx.player && ctx.match?.killBannerQueue) {
+             ctx.match.killBannerQueue.push({ line: `PICKED UP ${randomWep.name.toUpperCase()}`, color: `#${randomWep.color.toString(16).padStart(6, '0')}` });
+          }
+        } else if (vehicle === ctx.player && ctx.match?.killBannerQueue) {
+          const w = weaponCatalog[pickup.pickup.weaponId];
+          ctx.match.killBannerQueue.push({ line: `PICKED UP ${w.name.toUpperCase()}`, color: `#${w.color.toString(16).padStart(6, '0')}` });
         }
         pickup.pickup.respawn = 10;
         break;
@@ -152,6 +213,9 @@ export function updatePickups(ctx, dt) {
           ammo: catalogWeapon ? catalogWeapon.ammo : 4,
           cooldown: 0,
         };
+        if (vehicle === ctx.player && ctx.match?.killBannerQueue && catalogWeapon) {
+           ctx.match.killBannerQueue.push({ line: `PICKED UP ${catalogWeapon.name.toUpperCase()}`, color: `#${catalogWeapon.color.toString(16).padStart(6, '0')}` });
+        }
         pickup.pickup.respawn = 10;
         break;
       }

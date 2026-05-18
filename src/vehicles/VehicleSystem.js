@@ -82,6 +82,41 @@ export function updateVehicles(ctx, dt, effects) {
       transform.z = nextZ;
     }
 
+    if (transform.y === undefined) transform.y = 0;
+    if (velocity.y === undefined) velocity.y = 0;
+
+    velocity.y -= dt * 45; // gravity
+    transform.y += velocity.y * dt;
+
+    if (transform.y <= 0) {
+      if (velocity.y < -15 && velocity.collisionCooldown <= 0) {
+        effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, Math.min(15, Math.abs(velocity.y) * 0.5));
+        ctx.cameraEffects?.add(Math.min(0.2, Math.abs(velocity.y) * 0.01));
+        velocity.collisionCooldown = 0.2;
+      }
+      transform.y = 0;
+      velocity.y = 0;
+    }
+
+    if (ctx.specialTiles && transform.y < 1) {
+      for (const tile of ctx.specialTiles) {
+        if (Math.abs(transform.x - tile.x) < tile.w / 2 + 1 && Math.abs(transform.z - tile.z) < tile.d / 2 + 1) {
+          if (tile.type === 'turbo') {
+            velocity.speed = Math.max(velocity.speed, 140);
+            transform.yaw = tile.yaw;
+            velocity.steer = 0;
+            if (Math.random() < 0.2) effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 3);
+          } else if (tile.type === 'jump') {
+            if (velocity.y <= 0) {
+              velocity.y = 35;
+              effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 15);
+              ctx.cameraEffects?.add(0.1);
+            }
+          }
+        }
+      }
+    }
+
     velocity.wheelSpin += velocity.speed * dt * 2.7;
     velocity.smokeTimer -= dt;
     if ((controls.handbrake || controls.brake || Math.abs(velocity.steer) > 0.55) && Math.abs(velocity.speed) > 5 && velocity.smokeTimer <= 0) {
@@ -175,7 +210,7 @@ function updateStabilityAndRender(ctx, vehicles, dt) {
     entity.renderable.animTime = (entity.renderable.animTime || 0) + dt;
     const speedBob = Math.min(0.055, Math.abs(entity.velocity.speed) * 0.0018);
     const idleBob = Math.sin(entity.renderable.animTime * 4.5 + entity.transform.x) * speedBob;
-    group.position.set(entity.transform.x, stats.rideHeight + idleBob, entity.transform.z);
+    group.position.set(entity.transform.x, stats.rideHeight + idleBob + (entity.transform.y || 0), entity.transform.z);
     group.rotation.set(stability.pitch, entity.transform.yaw, stability.roll);
     entity.renderable.label?.sprite.quaternion.copy(ctx.camera.quaternion);
     entity.renderable.wheelPivots.forEach(({ pivot, front }) => {
