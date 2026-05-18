@@ -1,0 +1,28 @@
+{
+  "name": "ether-driver",
+  "version": "1.0.0",
+  "description": "Ether Driver - a realistic Three.js driving game prototype",
+  "main": "src/main.js",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "preview": "vite preview --host 127.0.0.1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@dimforge/rapier3d-compat": "^0.19.3",
+    "@miniplex/core": "^2.0.0-next.10",
+    "cannon-es": "^0.20.0",
+    "gsap": "^3.15.0",
+    "simplex-noise": "^4.0.3",
+    "stats.js": "^0.17.0",
+    "three": "^0.184.0",
+    "three-mesh-bvh": "^0.9.9",
+    "tone": "^15.1.22",
+    "vite": "^8.0.11",
+    "yuka": "^0.7.8"
+  }
+}
