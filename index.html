@@ -108,8 +108,23 @@
               <button id="saveTemplateButton" class="primary">Save Current Build</button>
             </div>
             <div id="templatesGrid" class="templates-grid">
-              <!-- Rendered via JS -->
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- AVAILABLE WEAPONS SETUP MODAL -->
+      <section id="weaponsSetupModal" class="modal-overlay hidden" aria-label="Available Pickup Weapons Setup">
+        <div class="modal-panel weapons-setup-modal-panel">
+          <header class="modal-header">
+            <h2>Available Pickup Weapons</h2>
+            <button id="closeWeaponsSetupButton" class="close-btn">×</button>
+          </header>
+          <div class="modal-body">
+            <p class="weapons-setup-subtitle" style="margin-bottom: 8px; font-size: 13px; color: rgba(255, 255, 255, 0.65);">
+              Configure which advanced munitions spawn across the tactical grid.
+            </p>
+            <div id="weaponsGrid" class="weapons-grid-setup"></div>
           </div>
         </div>
       </section>
@@ -133,7 +148,12 @@
               <span class="tick t80">80</span>
               <span class="tick t160">160</span>
             </div>
-            <div class="readout"><strong id="speed">0</strong><span>km/h</span></div>
+            <div class="readout-container">
+              <div class="readout"><strong id="speed">0</strong><span>km/h</span></div>
+              <div class="speed-bar-container">
+                <div id="speedBarFill" class="speed-bar-fill"></div>
+              </div>
+            </div>
           </div>
 
           <div class="cockpit">
@@ -246,18 +266,7 @@
               </div>
             </div>
             <div id="teamBuilder" class="team-builder" aria-label="Team builder"></div>
-            <fieldset class="weapon-fieldset">
-              <legend>Pickup Weapons</legend>
-              <label><input type="checkbox" data-weapon-toggle value="boom-missile" checked /> Boom Missile</label>
-              <label><input type="checkbox" data-weapon-toggle value="bouncy-wouncy" checked /> Bouncy Wouncy</label>
-              <label><input type="checkbox" data-weapon-toggle value="shock-lance" checked /> Shock Lance</label>
-              <label><input type="checkbox" data-weapon-toggle value="fire-mine" checked /> Fire Mine</label>
-              <label><input type="checkbox" data-weapon-toggle value="swarm-missiles" checked /> Swarm Missiles</label>
-              <label><input type="checkbox" data-weapon-toggle value="gravity-imploder" checked /> Gravity Imploder</label>
-              <label><input type="checkbox" data-weapon-toggle value="rail-slug" checked /> Rail Slug</label>
-              <label><input type="checkbox" data-weapon-toggle value="toxic-cask" checked /> Toxic Cask</label>
-              <label><input type="checkbox" data-weapon-toggle value="devastator-nuke" checked /> Devastator Nuke</label>
-            </fieldset>
+            <button id="toggleWeaponsSetupButton" class="weapons-toggle-btn" type="button">AVAILABLE WEAPONS SETUP</button>
           </section>
           <section id="garagePanel" class="menu-step garage-panel" aria-label="Custom car garage">
             <div class="garage-preview-wrap">

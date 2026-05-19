@@ -25,6 +25,9 @@ import { loadProgression, buyPremiumPart, upgradeStat, UPGRADE_MAX_LEVELS, getEx
 import { premiumPartDefinitions, PREMIUM_RARITIES } from './data/premiumParts.js';
 import { GARAGE_BUILD_LIMIT, clearActiveGarageTemplateId, createGarageTemplate, deleteGarageTemplate, getActiveGarageTemplateId, loadGarageTemplates, recordGarageTemplateUse, refreshGarageCatalog, renameGarageTemplate, setActiveGarageTemplateId, updateGarageTemplate } from './data/vehicleParts.js';
 
+import { weaponCatalog } from './data/weapons.js';
+import { getWeaponIcon } from './ui/WeaponIcons.js';
+
 const canvas = document.querySelector('#game');
 const ctx = createGameContext(canvas);
 const physics = await createRapierPhysics();
@@ -1190,6 +1193,88 @@ function renderTeamBuilder() {
   }).join('');
 }
 
+const weaponDescriptions = {
+  'boom-missile': 'Homing projectile delivering high explosive splash damage.',
+  'bouncy-wouncy': 'Bouncing grenade cluster that ricochets off walls before exploding.',
+  'shock-lance': 'Piercing energy bolt that fries subsystems across multiple targets.',
+  'fire-mine': 'Stationary proximity charge that coats the area in boiling thermite.',
+  'swarm-missiles': 'Barrage of micro-missiles tracking multiple targets simultaneously.',
+  'gravity-imploder': 'Localized gravity distortion that pulls all vehicles violently to the center.',
+  'rail-slug': 'Hyper-velocity kinetic rounds that punch through multiple targets instantly.',
+  'toxic-cask': 'Hazard barrel that bounces and spills acidic chemicals upon rupture.',
+  'devastator-nuke': 'Slow, devastating tactical payload with extreme blast radius.'
+};
+
+function renderWeaponsSetup() {
+  const container = document.getElementById('weaponsGrid');
+  if (!container) return;
+
+  const specialWeapons = Object.values(weaponCatalog).filter(w => w.slot === 'special');
+  
+  container.innerHTML = specialWeapons.map((w) => {
+    const iconSvg = getWeaponIcon(w.id);
+    const desc = weaponDescriptions[w.id] || 'Advanced combat ordnance.';
+    const isHoming = w.homingStrength && w.homingStrength > 0;
+    const trackingText = isHoming ? 'Yes' : 'No';
+    const dmgType = w.damageType || 'kinetic';
+    
+    // Checked by default
+    const isChecked = true;
+
+    return `
+      <div class="weapon-setup-card selected" data-w-id="${w.id}">
+        <input type="checkbox" data-weapon-toggle value="${w.id}" ${isChecked ? 'checked' : ''} style="display: none;" />
+        <div class="weapon-setup-icon-box">
+          ${iconSvg}
+        </div>
+        <div class="weapon-setup-details">
+          <div class="weapon-setup-name-row">
+            <span class="weapon-setup-name">${esc(w.name)}</span>
+            <span class="weapon-badge ${dmgType}">${esc(dmgType)}</span>
+          </div>
+          <p class="weapon-setup-desc">${esc(desc)}</p>
+          <div class="weapon-setup-stats">
+            <div class="weapon-setup-stat">
+              <span>Dmg</span>
+              <strong class="stat-damage">${w.damage}</strong>
+            </div>
+            <div class="weapon-setup-stat">
+              <span>Spd</span>
+              <strong class="stat-speed">${w.speed === 0 ? 'MINE' : w.speed}</strong>
+            </div>
+            <div class="weapon-setup-stat">
+              <span>Track</span>
+              <strong class="stat-homing">${trackingText}</strong>
+            </div>
+            <div class="weapon-setup-stat">
+              <span>Cd</span>
+              <strong class="stat-cooldown">${w.cooldown}s</strong>
+            </div>
+            <div class="weapon-setup-stat">
+              <span>Ammo</span>
+              <strong class="stat-ammo">${w.ammo}</strong>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Add click listeners to handle selecting/deselecting cards
+  const cards = container.querySelectorAll('.weapon-setup-card');
+  cards.forEach(card => {
+    card.addEventListener('click', (e) => {
+      if (e.target.tagName === 'INPUT') return;
+      const checkbox = card.querySelector('input[type="checkbox"]');
+      if (checkbox) {
+        checkbox.checked = !checkbox.checked;
+        card.classList.toggle('selected', checkbox.checked);
+        card.classList.toggle('deselected', !checkbox.checked);
+      }
+    });
+  });
+}
+
 function setTeamCount(count) {
   setupTeamCount = count;
   const previous = new Map(setupTeams.map((team) => [team.id, team]));
@@ -1738,7 +1823,8 @@ function renderGarageBuilder() {
 }
 
 function readMatchOptions() {
-  const enabledWeapons = ui.weaponToggles.filter((toggle) => toggle.checked).map((toggle) => toggle.value);
+  const toggles = [...document.querySelectorAll('[data-weapon-toggle]')];
+  const enabledWeapons = toggles.filter((toggle) => toggle.checked).map((toggle) => toggle.value);
   return {
     playerName: ui.playerNameInput.value.trim() || 'Player',
     teams: setupTeams,
@@ -2646,6 +2732,30 @@ ui.teamBuilder.addEventListener('click', (event) => {
   }
   renderTeamBuilder();
 });
+
+// Toggle Available Pickup Weapons Setup Modal
+const toggleWeaponsBtn = document.querySelector('#toggleWeaponsSetupButton');
+const weaponsModal = document.querySelector('#weaponsSetupModal');
+const closeWeaponsBtn = document.querySelector('#closeWeaponsSetupButton');
+
+if (toggleWeaponsBtn && weaponsModal) {
+  toggleWeaponsBtn.addEventListener('click', () => {
+    weaponsModal.classList.remove('hidden');
+  });
+}
+if (closeWeaponsBtn && weaponsModal) {
+  closeWeaponsBtn.addEventListener('click', () => {
+    weaponsModal.classList.add('hidden');
+  });
+}
+if (weaponsModal) {
+  weaponsModal.addEventListener('click', (e) => {
+    if (e.target === weaponsModal) {
+      weaponsModal.classList.add('hidden');
+    }
+  });
+}
+
 ui.teamBuilder.addEventListener('input', (event) => {
   const nameId = event.target.dataset.teamName;
   const customColorId = event.target.dataset.teamCustomColor;
@@ -2804,6 +2914,7 @@ ui.garageControls.addEventListener('change', async (event) => {
 refreshGarageCatalog();
 
 renderTeamBuilder();
+renderWeaponsSetup();
 renderGarageBuilder();
 renderSetupStep('team');
 

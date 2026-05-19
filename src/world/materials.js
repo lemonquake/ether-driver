@@ -19,7 +19,7 @@ function makeTexture(renderer, size, painter, repeatX = 1, repeatY = 1) {
 }
 
 export function createMaterials(renderer) {
-  const asphalt = makeTexture(renderer, 512, (ctx, size) => {
+  const asphalt = makeTexture(renderer, 256, (ctx, size) => {
     ctx.fillStyle = '#24272a';
     ctx.fillRect(0, 0, size, size);
     const img = ctx.getImageData(0, 0, size, size);
@@ -38,7 +38,7 @@ export function createMaterials(renderer) {
     ctx.putImageData(img, 0, 0);
   }, 1, 10);
 
-  const grass = makeTexture(renderer, 512, (ctx, size) => {
+  const grass = makeTexture(renderer, 128, (ctx, size) => {
     const img = ctx.createImageData(size, size);
     for (let y = 0; y < size; y += 1) {
       for (let x = 0; x < size; x += 1) {

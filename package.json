@@ -4,7 +4,7 @@
   "description": "Ether Driver - a realistic Three.js driving game prototype",
   "main": "src/main.js",
   "scripts": {
-    "dev": "vite --host 127.0.0.1 --force",
+    "dev": "vite --host 127.0.0.1 --force --open",
     "build": "vite build",
     "preview": "vite preview --host 127.0.0.1"
   },

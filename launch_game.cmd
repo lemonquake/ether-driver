@@ -73,7 +73,7 @@ if defined NPM_CMD (
         popd
         exit /b 1
     )
-    call "%NODE_CMD%" "node_modules\vite\bin\vite.js" --host 127.0.0.1 --force
+    call "%NODE_CMD%" "node_modules\vite\bin\vite.js" --host 127.0.0.1 --force --open
 )
 
 pause

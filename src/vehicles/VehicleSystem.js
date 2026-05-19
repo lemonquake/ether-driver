@@ -58,6 +58,30 @@ export function updateVehicles(ctx, dt, effects) {
     const nextZ = transform.z + forward.z * velocity.speed * dt;
     const carObb = makeObb(nextX, nextZ, stats.carHalfWidth * 2, stats.carHalfLength * 2, transform.yaw);
     
+    // Pre-calculate ramp details to check if vehicle is currently on a ramp/elevated platform
+    let preRampHeight = 0;
+    let preRampSlope = 0;
+    if (ctx.ramps) {
+      for (const ramp of ctx.ramps) {
+        const dx = transform.x - ramp.x;
+        const dz = transform.z - ramp.z;
+        const cos = Math.cos(ramp.yaw);
+        const sin = Math.sin(ramp.yaw);
+        const localX = dx * cos - dz * sin;
+        const localZ = dx * sin + dz * cos;
+        
+        if (Math.abs(localX) <= ramp.w / 2 && Math.abs(localZ) <= ramp.d / 2) {
+          const t = (localZ + ramp.d / 2) / ramp.d;
+          const h = ramp.hStart + t * (ramp.hEnd - ramp.hStart);
+          if (h > preRampHeight) {
+            preRampHeight = h;
+            preRampSlope = (ramp.hEnd - ramp.hStart) / ramp.d;
+          }
+        }
+      }
+    }
+    const isOnRamp = preRampSlope > 0 || preRampHeight > 0.1;
+
     // Filter collision shapes based on vehicle height
     const carY = transform.y || 0;
     const filteredShapes = ctx.collisionShapes.filter((shape) => {
@@ -73,7 +97,9 @@ export function updateVehicles(ctx, dt, effects) {
           obstacleHeight = 1.3;
         }
       }
-      return carY < obstacleHeight;
+      // For elevated platforms/buildings, subtract a threshold so climbing vehicles can drive onto them
+      const threshold = obstacleHeight >= 2.0 ? (isOnRamp ? 2.5 : 1.2) : 0.0;
+      return carY < obstacleHeight - threshold;
     });
     
     const collision = findObbCollision(carObb, filteredShapes);
@@ -112,8 +138,8 @@ export function updateVehicles(ctx, dt, effects) {
         const dz = transform.z - ramp.z;
         const cos = Math.cos(ramp.yaw);
         const sin = Math.sin(ramp.yaw);
-        const localX = dx * cos + dz * sin;
-        const localZ = -dx * sin + dz * cos;
+        const localX = dx * cos - dz * sin;
+        const localZ = dx * sin + dz * cos;
         
         if (Math.abs(localX) <= ramp.w / 2 && Math.abs(localZ) <= ramp.d / 2) {
           const t = (localZ + ramp.d / 2) / ramp.d;
@@ -182,12 +208,19 @@ export function updateVehicles(ctx, dt, effects) {
       effects.emitTrail(rx, ly, rz, 'plasma');
     }
 
+    // Under-chassis jump ascent trails
+    if (isAirborne && velocity.y > 0) {
+      if (Math.random() < 0.6) {
+        effects.emitTrail(transform.x + (Math.random() - 0.5) * 1.2, transform.y - 0.2, transform.z + (Math.random() - 0.5) * 1.2, 'plasma');
+      }
+    }
+
     if (ctx.specialTiles && transform.y < 1) {
       for (const tile of ctx.specialTiles) {
         if (Math.abs(transform.x - tile.x) < tile.w / 2 + 1 && Math.abs(transform.z - tile.z) < tile.d / 2 + 1) {
           if (tile.type === 'turbo') {
-            velocity.speed = Math.max(velocity.speed, 140);
-            transform.yaw = tile.yaw;
+            velocity.speed = Math.max(velocity.speed, 98);
+            transform.yaw = wrapAngle(tile.yaw + Math.PI);
             velocity.steer = 0;
             if (Math.random() < 0.2) effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 3);
             if (entity.score && !entity._lastTurboTile) {
@@ -199,6 +232,7 @@ export function updateVehicles(ctx, dt, effects) {
             if (velocity.y <= 0) {
               velocity.y = 35;
               effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 15);
+              effects.emitExplosion(transform.x, transform.z, 3.5, 16, 'plasma');
               if (isPlayer) {
                 ctx.cameraEffects?.add(0.12);
               }
@@ -211,8 +245,24 @@ export function updateVehicles(ctx, dt, effects) {
         }
       }
     }
-    if (entity._lastTurboTile > 0) entity._lastTurboTile -= dt;
-    else entity._lastTurboTile = 0;
+    if (entity._lastTurboTile > 0) {
+      entity._lastTurboTile -= dt;
+      // Emit animated fiery booster exhaust particles from the rear center of the vehicle
+      const rx = transform.x - forward.x * 1.3;
+      const rz = transform.z - forward.z * 1.3;
+      const ry = (transform.y || 0) + 0.25;
+      if (Math.random() < 0.75) {
+        effects.emitTrail(rx + (Math.random() - 0.5) * 0.2, ry, rz + (Math.random() - 0.5) * 0.2, 'fire');
+      }
+      if (Math.random() < 0.25) {
+        effects.emitTrail(rx + (Math.random() - 0.5) * 0.2, ry, rz + (Math.random() - 0.5) * 0.2, 'smoke');
+      }
+      if (Math.random() < 0.3) {
+        effects.emitTrail(rx + (Math.random() - 0.5) * 0.2, ry, rz + (Math.random() - 0.5) * 0.2, 'spark');
+      }
+    } else {
+      entity._lastTurboTile = 0;
+    }
 
     // Map-Specific Interactive Hazards
     if (ctx.activeMapId === 'basin') {
@@ -232,8 +282,23 @@ export function updateVehicles(ctx, dt, effects) {
         }
       }
     } else if (ctx.activeMapId === 'military') {
-      // Hightech Military Base: Central toxic bubbling Acid Pool centered at (0, 0), size 36x36, ground level (y <= 0.25)
-      if (Math.abs(transform.x) <= 18.0 && Math.abs(transform.z) <= 18.0 && (transform.y || 0) <= 0.25) {
+      // Hightech Military Base: Central toxic bubbling Acid Pool centered at (0, 0), size 36x36,
+      // and 4 extra symmetrical Acid Pools in the four quadrants centered at (-100, 50), (100, -50), (-100, -50), (100, 50) of size 20x20.
+      const inCentralPool = Math.abs(transform.x) <= 18.0 && Math.abs(transform.z) <= 18.0;
+      let inExtraPool = false;
+      const acidPools = [
+        { x: -100, z: 50 },
+        { x: 100, z: -50 },
+        { x: -100, z: -50 },
+        { x: 100, z: 50 }
+      ];
+      for (const pool of acidPools) {
+        if (Math.abs(transform.x - pool.x) <= 10.0 && Math.abs(transform.z - pool.z) <= 10.0) {
+          inExtraPool = true;
+          break;
+        }
+      }
+      if ((inCentralPool || inExtraPool) && (transform.y || 0) <= 0.25) {
         // Toxic chemical/acid tick! Apply progressive chemical damage
         applyDamage(entity, dt * 20, 'chemical', null, effects, { ctx });
         
@@ -248,8 +313,21 @@ export function updateVehicles(ctx, dt, effects) {
         }
       }
     } else if (ctx.activeMapId === 'hangar') {
-      // Elevated Hangar: Central boiling Lava Pit centered at (0, 0), size 32x48, ground level (y <= 0.25)
-      if (Math.abs(transform.x) <= 16.0 && Math.abs(transform.z) <= 24.0 && (transform.y || 0) <= 0.25) {
+      // Elevated Hangar: Central boiling Lava Pit centered at (0, 0), size 32x48,
+      // and 2 extra ground-level Boiling Lava Pits centered at (-90, 15) and (90, -15) of size 20x30.
+      const inCentralLava = Math.abs(transform.x) <= 16.0 && Math.abs(transform.z) <= 24.0;
+      let inExtraLava = false;
+      const lavaPits = [
+        { x: -90, z: 15 },
+        { x: 90, z: -15 }
+      ];
+      for (const pit of lavaPits) {
+        if (Math.abs(transform.x - pit.x) <= 10.0 && Math.abs(transform.z - pit.z) <= 15.0) {
+          inExtraLava = true;
+          break;
+        }
+      }
+      if ((inCentralLava || inExtraLava) && (transform.y || 0) <= 0.25) {
         // Thermal melt tick! Apply progressive burning damage
         applyDamage(entity, dt * 22, 'thermal', null, effects, { ctx });
         

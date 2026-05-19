@@ -534,8 +534,8 @@ export const mapRegistry = {
       addBarrier(ctx, materials, -40, 70, Math.PI / 2);
       addBarrier(ctx, materials, 40, 70, Math.PI / 2);
       
-      addCrateStack(ctx, materials, -90, -45);
-      addCrateStack(ctx, materials, 90, 45);
+      addCrateStack(ctx, materials, -75, -45);
+      addCrateStack(ctx, materials, 75, 45);
 
       // Speed boost grids and launch ramps
       addTurboTile(ctx, materials, 0, 110, 0);
@@ -563,16 +563,33 @@ export const mapRegistry = {
       acidMesh.position.set(0, 0.05, 0);
       ctx.scene.add(acidMesh);
 
+      // 4 Symmetrical Extra Acid Pools in the four quadrants (20x20)
+      const acidMesh1 = new THREE.Mesh(new THREE.BoxGeometry(20, 0.2, 20), acidMat);
+      acidMesh1.position.set(-100, 0.05, 50);
+      ctx.scene.add(acidMesh1);
+
+      const acidMesh2 = new THREE.Mesh(new THREE.BoxGeometry(20, 0.2, 20), acidMat);
+      acidMesh2.position.set(100, 0.05, -50);
+      ctx.scene.add(acidMesh2);
+
+      const acidMesh3 = new THREE.Mesh(new THREE.BoxGeometry(20, 0.2, 20), acidMat);
+      acidMesh3.position.set(-100, 0.05, -50);
+      ctx.scene.add(acidMesh3);
+
+      const acidMesh4 = new THREE.Mesh(new THREE.BoxGeometry(20, 0.2, 20), acidMat);
+      acidMesh4.position.set(100, 0.05, 50);
+      ctx.scene.add(acidMesh4);
+
       // Pickups & Weapons
       ctx.pickups.push(
         { x: -110, z: 0, weapon: 'swarm-missiles' },
         { x: 110, z: 0, weapon: 'rail-slug' },
         { x: 0, z: -110, weapon: 'devastator-nuke' },
         { x: 0, z: 110, weapon: 'gravity-imploder' },
-        { x: -100, z: 60, weapon: 'toxic-cask' },
-        { x: 100, z: -60, weapon: 'boom-missile' },
-        { x: -100, z: -60, weapon: 'bouncy-wouncy' },
-        { x: 100, z: 60, weapon: 'shock-lance' },
+        { x: -100, z: 50, weapon: 'toxic-cask' }, // inside top-left acid pool
+        { x: 100, z: -50, weapon: 'boom-missile' }, // inside bottom-right acid pool
+        { x: -100, z: -50, weapon: 'bouncy-wouncy' }, // inside bottom-left acid pool
+        { x: 100, z: 50, weapon: 'shock-lance' }, // inside top-right acid pool
         { x: 0, z: 0, weapon: 'health-kit' },
         { x: -50, z: -50, weapon: 'armor-pack' },
         { x: 50, z: 50, weapon: 'tool-box' },
@@ -634,6 +651,15 @@ export const mapRegistry = {
       const lavaMesh = new THREE.Mesh(new THREE.BoxGeometry(32, 0.2, 48), lavaMat);
       lavaMesh.position.set(0, 0.05, 0);
       ctx.scene.add(lavaMesh);
+
+      // 2 Extra ground-level Boiling Lava Pits (20x30)
+      const lavaMesh1 = new THREE.Mesh(new THREE.BoxGeometry(20, 0.2, 30), lavaMat);
+      lavaMesh1.position.set(-90, 0.05, 15);
+      ctx.scene.add(lavaMesh1);
+
+      const lavaMesh2 = new THREE.Mesh(new THREE.BoxGeometry(20, 0.2, 30), lavaMat);
+      lavaMesh2.position.set(90, 0.05, -15);
+      ctx.scene.add(lavaMesh2);
 
       // Elevated Concrete Platforms
       // Platform 1: Second Floor (Height = 5.0m), centered at (-90, -90), size 60x60

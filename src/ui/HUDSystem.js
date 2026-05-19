@@ -7,6 +7,7 @@ export function createHUD(ctx) {
   const ui = {
     hud: document.querySelector('#hud'),
     speed: document.querySelector('#speed'),
+    speedBarFill: document.querySelector('#speedBarFill'),
     rpm: document.querySelector('#rpm'),
     gear: document.querySelector('#gear'),
     drift: document.querySelector('#drift'),
@@ -536,6 +537,13 @@ export function updateHUD(ctx, ui, dt = 0.016) {
   const speedAngle = -128 + Math.min(speedKmh, 180) / 180 * 260;
   const keys = ctx.input.keys;
   ui.speed.textContent = `${Math.round(speedKmh)}`;
+  if (ui.speedBarFill) {
+    const speedPercent = Math.min(speedKmh, 180) / 180 * 100;
+    ui.speedBarFill.style.width = `${speedPercent}%`;
+    const hue = 180 - (speedPercent * 1.8);
+    ui.speedBarFill.style.background = `linear-gradient(90deg, hsl(180, 100%, 50%), hsl(${hue}, 100%, 50%))`;
+    ui.speedBarFill.style.boxShadow = `0 0 8px hsl(${hue}, 100%, 50%)`;
+  }
   ui.rpm.textContent = `${Math.round(900 + speedKmh * 42 + (keys.has('KeyW') ? 2200 : 0))}`;
   ui.gear.textContent = player.velocity.speed < -1 ? 'R' : Math.abs(player.velocity.speed) < 1 ? 'N' : 'D';
   ui.drift.textContent = `${Math.round(Math.abs(player.velocity.steer) * 100)}%`;
