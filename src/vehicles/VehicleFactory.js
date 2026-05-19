@@ -53,7 +53,7 @@ function loadPaintTexture(textureId, repeatX = 2, repeatY = 2) {
   };
 
   const filename = mapName[textureId] || 'carbon.png';
-  const texture = globalTextureLoader.load(`/textures/${filename}`);
+  const texture = globalTextureLoader.load(`./textures/${filename}`);
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.wrapS = THREE.RepeatWrapping;
   texture.wrapT = THREE.RepeatWrapping;

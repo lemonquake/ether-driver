@@ -1,0 +1,636 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ether Driver</title>
+    <script type="module" crossorigin src="./assets/index-cFg_5HW5.js"></script>
+    <link rel="stylesheet" crossorigin href="./assets/index-h3xWZxRP.css">
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="game"></canvas>
+      <button id="quickTipsToggle" class="quick-tips-toggle" type="button" aria-pressed="true">Quick Tips</button>
+      <div id="quickTipsLayer" class="quick-tips-layer" aria-live="polite"></div>
+      
+      <!-- MAIN MENU -->
+      <section id="mainMenuScreen" class="main-menu-screen active" aria-label="Main Menu">
+        <div class="main-menu-grid" aria-hidden="true"></div>
+        <div class="main-menu-circuit main-menu-circuit-a" aria-hidden="true"></div>
+        <div class="main-menu-circuit main-menu-circuit-b" aria-hidden="true"></div>
+        <div class="main-menu-orbit" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <aside class="main-menu-hud main-menu-hud-left" aria-hidden="true">
+          <span>DRIVE CORE</span>
+          <b>SYNC 98.7</b>
+          <i></i>
+        </aside>
+        <aside class="main-menu-hud main-menu-hud-right" aria-hidden="true">
+          <span>THREAT GRID</span>
+          <b>ARMED</b>
+          <i></i>
+        </aside>
+        <div class="main-menu-content">
+          <div class="main-menu-brand">
+            <p class="main-menu-kicker">Neural ignition interface</p>
+            <h1 data-text="ETHER DRIVER"><span>ETHER</span> <span>DRIVER</span></h1>
+            <p>v1.0 // cyber combat chassis online</p>
+          </div>
+          <div class="main-menu-nav">
+            <button id="navCampaignButton" type="button" class="main-nav-btn disabled" aria-disabled="true">
+              <span class="nav-btn-index">00</span>
+              <span class="nav-btn-copy"><b>CAMPAIGN</b><small>WIP // locked simulation</small></span>
+              <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
+              <span class="nav-btn-gear"></span>
+              <span class="nav-btn-trail"></span>
+            </button>
+            <button id="navCustomMatchButton" type="button" class="main-nav-btn primary">
+              <span class="nav-btn-index">01</span>
+              <span class="nav-btn-copy"><b>CUSTOM MATCH</b><small>deploy arena protocol</small></span>
+              <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
+              <span class="nav-btn-gear"></span>
+              <span class="nav-btn-trail"></span>
+            </button>
+            <button id="navVehicleBuildsButton" type="button" class="main-nav-btn">
+              <span class="nav-btn-index">02</span>
+              <span class="nav-btn-copy"><b>VEHICLE BUILDS</b><small>tune chassis memory</small></span>
+              <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
+              <span class="nav-btn-gear"></span>
+              <span class="nav-btn-trail"></span>
+            </button>
+            <button id="navPremiumShopButton" type="button" class="main-nav-btn">
+              <span class="nav-btn-index">03</span>
+              <span class="nav-btn-copy"><b>PREMIUM SHOP</b><small>black market uplink</small></span>
+              <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
+              <span class="nav-btn-gear"></span>
+              <span class="nav-btn-trail"></span>
+            </button>
+            <button id="navAchievementsButton" type="button" class="main-nav-btn">
+              <span class="nav-btn-index">04</span>
+              <span class="nav-btn-copy"><b>LIFETIME ACHIEVEMENTS</b><small>combat record archive</small></span>
+              <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
+              <span class="nav-btn-gear"></span>
+              <span class="nav-btn-trail"></span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- LIFETIME ACHIEVEMENTS MODAL -->
+      <section id="achievementsModal" class="modal-overlay hidden" aria-label="Lifetime Achievements">
+        <div class="modal-panel">
+          <header class="modal-header">
+            <h2>Lifetime Achievements</h2>
+            <button id="closeAchievementsButton" class="close-btn">×</button>
+          </header>
+          <div class="modal-body">
+            <div id="achievementsGrid" class="achievements-grid">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- VEHICLE BUILDS MODAL -->
+      <section id="templatesModal" class="modal-overlay hidden builds-overlay" aria-label="Vehicle Builds">
+        <div class="modal-panel builds-panel">
+          <header class="modal-header">
+            <h2>Vehicle Builds</h2>
+            <button id="closeTemplatesButton" class="close-btn">×</button>
+          </header>
+          <div class="modal-body builds-body">
+            <section id="currentBuildPanel" class="current-build-panel" aria-label="Current Build">
+              <!-- Rendered via JS -->
+            </section>
+            <div class="template-actions">
+              <input type="text" id="templateNameInput" placeholder="Template Name" maxlength="24" />
+              <button id="saveTemplateButton" class="primary">Save Current Build</button>
+            </div>
+            <div id="templatesGrid" class="templates-grid">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- AVAILABLE WEAPONS SETUP MODAL -->
+      <section id="weaponsSetupModal" class="modal-overlay hidden" aria-label="Available Pickup Weapons Setup">
+        <div class="modal-panel weapons-setup-modal-panel">
+          <header class="modal-header">
+            <h2>Available Pickup Weapons</h2>
+            <button id="closeWeaponsSetupButton" class="close-btn">×</button>
+          </header>
+          <div class="modal-body">
+            <p class="weapons-setup-subtitle" style="margin-bottom: 8px; font-size: 13px; color: rgba(255, 255, 255, 0.65);">
+              Configure which advanced munitions spawn across the tactical grid.
+            </p>
+            <div id="weaponsGrid" class="weapons-grid-setup"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="hud" aria-label="Ether Driver instruments">
+        <div class="brand">
+          <span class="brand-mark"></span>
+          <div>
+            <h1>Ether Driver</h1>
+            <p id="driveMode">street circuit</p>
+          </div>
+        </div>
+
+        <div class="telemetry">
+          <div class="gauge">
+            <div class="gauge-face">
+              <div class="gauge-glow"></div>
+              <div class="needle speed-needle"></div>
+              <div class="gauge-center"></div>
+              <span class="tick t0">0</span>
+              <span class="tick t80">80</span>
+              <span class="tick t160">160</span>
+            </div>
+            <div class="readout-container">
+              <div class="readout"><strong id="speed">0</strong><span>km/h</span></div>
+              <div class="speed-bar-container">
+                <div id="speedBarFill" class="speed-bar-fill"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="cockpit">
+            <div class="steering-shell">
+              <div id="steeringWheel" class="steering-wheel">
+                <span></span><span></span><span></span>
+              </div>
+            </div>
+            <div class="pedals">
+              <div class="pedal brake"><span id="brakeFill"></span><b>BRK</b></div>
+              <div class="pedal throttle"><span id="throttleFill"></span><b>THR</b></div>
+            </div>
+          </div>
+
+          <div class="stack">
+            <div class="metric"><span>RPM</span><strong id="rpm">900</strong></div>
+            <div class="metric"><span>GEAR</span><strong id="gear">N</strong></div>
+            <div class="metric"><span>DRIFT</span><strong id="drift">0%</strong></div>
+          </div>
+        </div>
+
+        <div id="minimapContainer" class="minimap-container">
+          <canvas id="minimap" width="240" height="240"></canvas>
+          <div class="minimap-scanline"></div>
+        </div>
+
+        <div id="killFeed" class="kill-feed" aria-live="polite"></div>
+
+        <div class="combat-hud">
+          <div class="health">
+            <span id="armorText">MEDIUM</span>
+            <b><i id="healthFill"></i></b>
+          </div>
+          <div id="weaponPanel" class="weapon-panel">
+            <div class="weapon-card" id="weaponCardQ">
+              <div class="weapon-card-key">Q</div>
+              <div class="weapon-card-icon" id="weaponIconQ"></div>
+              <div class="weapon-card-info">
+                <span class="weapon-card-name" id="weaponNameQ">EMPTY</span>
+                <span class="weapon-card-ammo" id="weaponAmmoQ"></span>
+              </div>
+              <div class="weapon-card-cooldown" id="weaponCooldownQ"></div>
+            </div>
+            <div class="weapon-card" id="weaponCardE">
+              <div class="weapon-card-key">E</div>
+              <div class="weapon-card-icon" id="weaponIconE"></div>
+              <div class="weapon-card-info">
+                <span class="weapon-card-name" id="weaponNameE">EMPTY</span>
+                <span class="weapon-card-ammo" id="weaponAmmoE"></span>
+              </div>
+              <div class="weapon-card-cooldown" id="weaponCooldownE"></div>
+            </div>
+          </div>
+        </div>
+        <div id="worldLabels" class="world-labels"></div>
+        <div id="rewardPopups" class="reward-popups" aria-live="polite"></div>
+      </section>
+
+      <div id="killBanner" class="kill-banner" aria-live="assertive"></div>
+
+      <div id="crosshair">
+        <div class="crosshair-ring crosshair-ring-outer"></div>
+        <div class="crosshair-ring crosshair-ring-inner"></div>
+        <div class="crosshair-sweep"></div>
+        <div class="crosshair-brackets">
+          <span class="reticle-mark mark-top"></span>
+          <span class="reticle-mark mark-bottom"></span>
+          <span class="reticle-mark mark-left"></span>
+          <span class="reticle-mark mark-right"></span>
+        </div>
+        <div class="crosshair-dot"></div>
+        <b id="lockText">NO LOCK</b>
+        <small id="targetName"></small>
+        <small id="targetRange"></small>
+      </div>
+      <section id="scoreboard" class="scoreboard" aria-label="Scoreboard">
+        <header>
+          <strong>Scoreboard</strong>
+          <span>Tab toggles</span>
+        </header>
+        <div class="scoreboard-grid scoreboard-head">
+          <span>Name</span><span>Team</span><span>K</span><span>D</span><span>DMG</span><span>HP</span><span>Weapons</span>
+        </div>
+        <div id="scoreboardBody"></div>
+      </section>
+      <section id="matchMenu" class="match-menu" aria-label="Match setup">
+        <div class="menu-panel">
+          <section id="teamSetupStep" class="menu-step team-setup-step">
+            <header class="menu-step-header">
+              <div>
+                <p class="menu-kicker">Ether Driver</p>
+                <h2>Team Mayhem Setup</h2>
+              </div>
+              <div class="menu-header-actions">
+                <button id="backToMainMenuFromSetupButton" type="button">Back to Main Menu</button>
+                <button id="openShopFromMenuButton" type="button" class="shop-btn">🛒 Shop & Upgrades</button>
+                <button id="continueToGarageButton" class="next-step-cta" type="button"><span>Continue to Vehicle Editor</span></button>
+              </div>
+            </header>
+            <div class="setup-grid">
+              <label class="setup-field">
+                <span>Driver Name</span>
+                <input id="playerNameInput" maxlength="18" value="Player" />
+              </label>
+              <div class="team-count" role="group" aria-label="Team count">
+                <span>Teams</span>
+                <button type="button" data-team-count="2" class="selected">2</button>
+                <button type="button" data-team-count="3">3</button>
+                <button type="button" data-team-count="4">4</button>
+              </div>
+            </div>
+            <div id="teamBuilder" class="team-builder" aria-label="Team builder"></div>
+            <button id="toggleWeaponsSetupButton" class="weapons-toggle-btn" type="button">AVAILABLE WEAPONS SETUP</button>
+          </section>
+          <section id="garagePanel" class="menu-step garage-panel" aria-label="Custom car garage">
+            <div class="garage-preview-wrap">
+              <header class="garage-editor-header">
+                <button id="backToTeamButton" type="button">Back</button>
+                <div>
+                <p class="menu-kicker">Custom Garage</p>
+                <h3 id="garageTitle">Build Your Driver</h3>
+                </div>
+                <div class="garage-header-actions">
+                  <button id="openBuildsFromGarageButton" type="button">Vehicle Builds</button>
+                  <button id="saveEditedBuildButton" type="button" class="build-save-btn" disabled>Save Changes</button>
+                  <button id="saveBuildVariantButton" type="button" class="build-save-btn">Save As New</button>
+                  <button id="continueToGameButton" class="next-step-cta" type="button"><span>Continue to Game Setup</span></button>
+                </div>
+              </header>
+              <div id="garagePreview" class="garage-preview"></div>
+            </div>
+            <div id="garageControls" class="garage-controls"></div>
+            <div id="garageStats" class="garage-stats"></div>
+          </section>
+          <section id="gameSetupStep" class="menu-step game-setup-step" aria-label="Game setup">
+            <header class="menu-step-header">
+              <div>
+                <p class="menu-kicker">Game Rules</p>
+                <h2>Game Setup</h2>
+              </div>
+              <div class="game-setup-header-actions">
+                <button id="backToGarageButton" type="button">Back</button>
+                <button id="startMatchButton" type="button" class="primary next-step-cta"><span>Start Match</span></button>
+              </div>
+            </header>
+
+            <div class="game-setup-dashboard">
+              <!-- Left Column: Win Conditions & Options -->
+              <div class="game-setup-panel win-conditions-panel">
+                <h3 class="setup-subtitle">// MATCH PARAMETERS & WIN CONDITIONS</h3>
+                
+                <fieldset class="game-setup-field">
+                  <legend>Kill Limit <small>(First driver to reach X kills)</small></legend>
+                  <div class="kill-limit-options" role="group" aria-label="Kill limit">
+                    <button type="button" data-kill-limit="0" class="selected">None</button>
+                    <button type="button" data-kill-limit="5">5</button>
+                    <button type="button" data-kill-limit="10">10</button>
+                    <button type="button" data-kill-limit="15">15</button>
+                    <button type="button" data-kill-limit="20">20</button>
+                    <button type="button" data-kill-limit="25">25</button>
+                    <button type="button" data-kill-limit="50">50</button>
+                  </div>
+                </fieldset>
+                
+                <fieldset class="game-setup-field">
+                  <legend>Team Kill Limit <small>(First team to reach X total kills)</small></legend>
+                  <div class="team-kill-limit-options" role="group" aria-label="Team kill limit">
+                    <button type="button" data-team-kill-limit="0" class="selected">None</button>
+                    <button type="button" data-team-kill-limit="10">10</button>
+                    <button type="button" data-team-kill-limit="20">20</button>
+                    <button type="button" data-team-kill-limit="30">30</button>
+                    <button type="button" data-team-kill-limit="50">50</button>
+                    <button type="button" data-team-kill-limit="75">75</button>
+                    <button type="button" data-team-kill-limit="100">100</button>
+                  </div>
+                </fieldset>
+
+                <div class="setup-tactical-hud">
+                  <div class="hud-scanning-line"></div>
+                  <span class="hud-ticker-label">TACTICAL FEED: MATCH RULE MATRIX</span>
+                  <p id="matchRulesExplanation" class="hud-ticker-text">ARENA COMBAT COMMENCES UNDER REGULATED WIN SPECIFICATIONS. EXCEEDING THE ENGAGEMENT LIMIT INITIATES AUTOMATIC SECTOR DECLASSIFICATION AND IMMEDIATE MATCH SUSPENSION.</p>
+                </div>
+              </div>
+
+              <!-- Right Column: Interactive Map Selection -->
+              <div class="game-setup-panel map-selection-panel">
+                <h3 class="setup-subtitle">// SELECT THEATER OF OPERATIONS</h3>
+                
+                <div class="map-tab-list" role="tablist" aria-label="Select Theater of Operations">
+                  <button type="button" class="map-tab-btn selected" data-map-id="city" role="tab" aria-selected="true" aria-controls="map-panel-city">
+                    <span class="tab-kicker">SECTOR 01: URBAN</span>
+                    <b>Megalopolis Mayhem</b>
+                  </button>
+                  <button type="button" class="map-tab-btn" data-map-id="basin" role="tab" aria-selected="false" aria-controls="map-panel-basin">
+                    <span class="tab-kicker">SECTOR 02: THERMAL</span>
+                    <b>Doom Basin</b>
+                  </button>
+                  <button type="button" class="map-tab-btn" data-map-id="outpost" role="tab" aria-selected="false" aria-controls="map-panel-outpost">
+                    <span class="tab-kicker">SECTOR 03: CYBER</span>
+                    <b>Neon Outpost</b>
+                  </button>
+                  <button type="button" class="map-tab-btn" data-map-id="military" role="tab" aria-selected="false" aria-controls="map-panel-military">
+                    <span class="tab-kicker">SECTOR 04: TACTICAL</span>
+                    <b>Military Base</b>
+                  </button>
+                  <button type="button" class="map-tab-btn" data-map-id="hangar" role="tab" aria-selected="false" aria-controls="map-panel-hangar">
+                    <span class="tab-kicker">SECTOR 05: ELEVATED</span>
+                    <b>Elevated Hangar</b>
+                  </button>
+                </div>
+
+                <div class="map-detail-panels">
+                  <!-- Megalopolis Mayhem Panel -->
+                  <div class="map-detail-panel selected" id="map-panel-city" data-detail-map="city" role="tabpanel">
+                    <div class="map-detail-visuals">
+                      <img class="map-showcase-img" src="./textures/map_city.png" alt="Megalopolis Mayhem Showcase" />
+                    </div>
+                    <div class="map-detail-text">
+                      <div class="map-detail-header">
+                        <h4>Megalopolis Mayhem</h4>
+                        <span class="map-detail-sector">SECTOR: ACTIVE</span>
+                      </div>
+                      <p class="map-detail-tagline">High-Density Concrete Block Grids</p>
+                      <p class="map-detail-desc">Welcome to the neon-drenched concrete jungle where heavy metal meets heavy wreckage! Symmetrical grid-locked skyscraper blocks, loops, and 4 massive concrete launch ramps. Perfect for mayhem.</p>
+                      
+                      <div class="map-spec-grid">
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Terrain Base</span>
+                          <span class="map-spec-value">Reinforced Asphalt</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Gravity Rating</span>
+                          <span class="map-spec-value">1.0G (Standard)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Thermal Hazards</span>
+                          <span class="map-spec-value">None Detected</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Special Features</span>
+                          <span class="map-spec-value">4x Inward Jump Ramps</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Doom Basin Panel -->
+                  <div class="map-detail-panel" id="map-panel-basin" data-detail-map="basin" role="tabpanel">
+                    <div class="map-detail-visuals">
+                      <img class="map-showcase-img" src="./textures/map_basin.png" alt="Doom Basin Showcase" />
+                    </div>
+                    <div class="map-detail-text">
+                      <div class="map-detail-header">
+                        <h4>Doom Basin</h4>
+                        <span class="map-detail-sector danger">SECTOR: THERMAL LIMIT</span>
+                      </div>
+                      <p class="map-detail-tagline">Industrial Slag Crater & Perimeter Ring-Roads</p>
+                      <p class="map-detail-desc">A desolate industrial wasteland crater packed with elevated perimeter loops and giant dual jumping ramps that launch vehicles directly across the central boiling magma pit. Watch your slides!</p>
+                      
+                      <div class="map-spec-grid">
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Terrain Base</span>
+                          <span class="map-spec-value warning">Desert Wasteland</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Gravity Rating</span>
+                          <span class="map-spec-value">1.0G (Standard)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Thermal Hazards</span>
+                          <span class="map-spec-value danger">Boiling Magma Pit</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Special Features</span>
+                          <span class="map-spec-value warning">Center Jump Vaults</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Neon Outpost Panel -->
+                  <div class="map-detail-panel" id="map-panel-outpost" data-detail-map="outpost" role="tabpanel">
+                    <div class="map-detail-visuals">
+                      <img class="map-showcase-img" src="./textures/map_outpost.png" alt="Neon Outpost Showcase" />
+                    </div>
+                    <div class="map-detail-text">
+                      <div class="map-detail-header">
+                        <h4>Neon Outpost</h4>
+                        <span class="map-detail-sector warning">SECTOR: STAGED</span>
+                      </div>
+                      <p class="map-detail-tagline">Laboratory Zoning & Hyper-Speed Turbo Grids</p>
+                      <p class="map-detail-desc">A futuristic laboratory sector with high-voltage reactor coils, barricade grids, intensive turbo-tile patterns, hyper-speed jump grids, and narrow channels. Maximum arcing and high speed!</p>
+                      
+                      <div class="map-spec-grid">
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Terrain Base</span>
+                          <span class="map-spec-value">Dark Cyber Metal</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Gravity Rating</span>
+                          <span class="map-spec-value">1.0G (Standard)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Thermal Hazards</span>
+                          <span class="map-spec-value warning">None (Electrical Arc)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Special Features</span>
+                          <span class="map-spec-value">Intense Turbo Grid Array</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Hightech Military Base Panel -->
+                  <div class="map-detail-panel" id="map-panel-military" data-detail-map="military" role="tabpanel">
+                    <div class="map-detail-visuals">
+                      <img class="map-showcase-img" src="./textures/map_military.png" alt="Hightech Military Base Showcase" />
+                    </div>
+                    <div class="map-detail-text">
+                      <div class="map-detail-header">
+                        <h4>Military Base</h4>
+                        <span class="map-detail-sector warning">SECTOR: SECURED</span>
+                      </div>
+                      <p class="map-detail-tagline">Tactical Barracks, Blast Walls & Bubbling Acid</p>
+                      <p class="map-detail-desc">A heavily guarded high-tech tactical base featuring reinforced perimeter blast walls, warehouses, checkpoints, launch ramps, and a bubbling green Acid Pool that melts vehicle armor in seconds.</p>
+                      
+                      <div class="map-spec-grid">
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Terrain Base</span>
+                          <span class="map-spec-value">Reinforced Asphalt</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Gravity Rating</span>
+                          <span class="map-spec-value">1.0G (Standard)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Thermal Hazards</span>
+                          <span class="map-spec-value danger">Toxic Acid Pool (20 DPS)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Special Features</span>
+                          <span class="map-spec-value">Bubbling Green Trails</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Elevated Hangar Panel -->
+                  <div class="map-detail-panel" id="map-panel-hangar" data-detail-map="hangar" role="tabpanel">
+                    <div class="map-detail-visuals">
+                      <img class="map-showcase-img" src="./textures/map_hangar.png" alt="Elevated Hangar Showcase" />
+                    </div>
+                    <div class="map-detail-text">
+                      <div class="map-detail-header">
+                        <h4>Elevated Hangar</h4>
+                        <span class="map-detail-sector danger">SECTOR: VERTICAL</span>
+                      </div>
+                      <p class="map-detail-tagline">Multi-Level Decks, Long Ramps & Lava Pits</p>
+                      <p class="map-detail-desc">A colossal aerospace hangar. Speed up extremely long, inclined metal ramps to access elevated concrete platform rooftops (5m and 10m high) or fall down directly into the boiling lava gaps below!</p>
+                      
+                      <div class="map-spec-grid">
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Terrain Base</span>
+                          <span class="map-spec-value warning">Industrial Steel Plating</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Gravity Rating</span>
+                          <span class="map-spec-value">1.0G (Standard)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Thermal Hazards</span>
+                          <span class="map-spec-value danger">Boiling Lava Pit (22 DPS)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Special Features</span>
+                          <span class="map-spec-value warning">Flat Rooftop Riding Support</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+          
+          <section id="shopMenuStep" class="menu-step shop-menu-step" aria-label="Premium Shop">
+            <header class="menu-step-header">
+              <button id="backFromShopButton" type="button">Back</button>
+              <div>
+                <p class="menu-kicker">Black Market</p>
+                <h2>Premium Parts Shop</h2>
+              </div>
+              <div id="shopStatsHeader" class="shop-stats-header"></div>
+            </header>
+            <div class="shop-tabs">
+              <button type="button" class="selected" data-shop-tab="upgrades">Upgrades</button>
+              <button type="button" data-shop-tab="chassis">Chassis</button>
+              <button type="button" data-shop-tab="cabin">Cabin</button>
+              <button type="button" data-shop-tab="wheel">Wheels</button>
+              <button type="button" data-shop-tab="turret">Turret</button>
+              <button type="button" data-shop-tab="armor">Armor</button>
+              <button type="button" data-shop-tab="paintJob">Paint</button>
+            </div>
+            <div id="shopGrid" class="shop-grid"></div>
+          </section>
+        </div>
+      </section>
+      <section id="resultsOverlay" class="results-overlay" aria-label="Match results">
+        <div class="results-panel">
+          <div id="mvpPedestal" class="mvp-pedestal">
+            <div class="mvp-portrait-wrap">
+              <canvas id="mvpPortrait" class="mvp-portrait" width="220" height="220"></canvas>
+            </div>
+            <div class="mvp-crown">★ MVP ★</div>
+            <div id="mvpName" class="mvp-name">MVP</div>
+            <div id="mvpTeam" class="mvp-team">Team</div>
+            <div id="mvpStats" class="mvp-stats"></div>
+          </div>
+          <p class="menu-kicker">Match Complete</p>
+          <h2 id="resultsTitle">Winner</h2>
+          <div id="resultsRewards" class="results-rewards"></div>
+          <div id="resultsBody" class="results-body"></div>
+          <button id="moreDetailsButton" type="button" class="more-details-btn">▼ More Details</button>
+          <div id="detailedResults" class="detailed-results"></div>
+          <div class="results-actions" aria-label="Match end actions">
+            <button id="restartMatchButton" type="button" class="primary">New Match</button>
+            <button id="resultsMainMenuButton" type="button">Back to Main Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="pauseMenu" class="pause-menu hidden" aria-label="Pause Menu">
+        <div class="menu-panel pause-panel">
+          <header class="menu-step-header">
+            <div>
+              <p class="menu-kicker">Paused</p>
+              <h2>Game Paused</h2>
+            </div>
+          </header>
+          <div class="pause-actions">
+            <button id="resumeGameButton" type="button" class="primary">Resume Game</button>
+            <button id="openShopFromPauseButton" type="button" class="shop-btn">🛒 Shop & Upgrades</button>
+            <button id="settingsButton" type="button">Settings</button>
+            <button id="restartGameButton" type="button">Restart Match</button>
+            <button id="mainMenuButton" type="button" class="danger">Main Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="settingsMenu" class="settings-menu hidden" aria-label="Settings Menu">
+        <div class="menu-panel settings-panel">
+          <header class="menu-step-header">
+            <div>
+              <p class="menu-kicker">Configuration</p>
+              <h2>Settings</h2>
+            </div>
+          </header>
+          <div class="settings-content">
+            <label class="settings-toggle-row">
+              <span>
+                <strong>Quick Tips</strong>
+                <small>Show spotlight hints for builds, rewards, setup, and progression.</small>
+              </span>
+              <input id="quickTipsSettingsToggle" type="checkbox" checked />
+            </label>
+          </div>
+          <div class="pause-actions">
+            <button id="closeSettingsButton" type="button" class="primary">Back to Pause Menu</button>
+          </div>
+        </div>
+      </section>
+
+      <button id="recordRouteButton" class="record-route" type="button">RECORD</button>
+      <div id="vignette"></div>
+    </main>
+  </body>
+</html>

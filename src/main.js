@@ -1548,7 +1548,7 @@ function renderColorControl(key, label, intensityKey, intensityLabel) {
 
 function paintTextureUrl(textureId) {
   const file = paintTextureFiles[textureId];
-  return file ? `/textures/${file}` : '';
+  return file ? `./textures/${file}` : '';
 }
 
 function renderPaintCards() {
