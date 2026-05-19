@@ -1,6 +1,7 @@
 import { armorMatrix } from '../data/weapons.js';
 import { angleTo, distance2D, forwardFromYaw } from '../core/collision.js';
 import { formatKillLine, pushKillFeed } from '../match/MatchSystem.js';
+import { grantKillReward } from '../core/ProgressionSystem.js';
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -94,7 +95,26 @@ export function applyDamage(target, amount, damageType, source, effects, meta = 
     target.health.specialHitFlash = 0.4;
   }
 
-  if (source?.score) source.score.damageDealt += finalDamage;
+  if (source?.score && source !== target) {
+    source.score.damageDealt += finalDamage;
+    if (meta.weaponId) {
+      if (!source.score.weaponDamage) source.score.weaponDamage = {};
+      source.score.weaponDamage[meta.weaponId] = (source.score.weaponDamage[meta.weaponId] || 0) + finalDamage;
+    }
+    
+    // Reward for hitting
+    if (source === meta.ctx?.player && meta.ctx?.match?.playerRewards) {
+      const isTurret = meta.weaponId === 'turret' || !meta.weaponId || meta.weaponId === 'collision';
+      const rewards = meta.ctx.match.playerRewards;
+      if (isTurret) {
+        rewards.turretHits.exp += 1;
+        if (Math.random() > 0.8) rewards.turretHits.gold += 1;
+      } else {
+        rewards.weaponHits.exp += 3;
+        rewards.weaponHits.gold += 1;
+      }
+    }
+  }
 
   // Enhanced impact push with directional camera shake
   applyImpactPush(target, meta);
@@ -151,7 +171,29 @@ export function applyDamage(target, amount, damageType, source, effects, meta = 
     const d5 = performance.now();
     if (source?.score && source !== target) {
       source.score.kills += 1;
-      if (meta.ctx?.match) pushKillFeed(meta.ctx, formatKillLine(source, target), source.teamColor || '#82ffcf');
+      if (source === meta.ctx?.player) {
+        if (meta.ctx.match?.playerRewards) {
+          meta.ctx.match.playerRewards.kills.exp += 50;
+          meta.ctx.match.playerRewards.kills.gold += Math.floor(10 + Math.random() * 10);
+        }
+        if (meta.ctx.ui && meta.ctx.ui.showRewardPopup) {
+           meta.ctx.ui.showRewardPopup(`+50 EXP`);
+        }
+      }
+      if (meta.ctx?.match) {
+        pushKillFeed(meta.ctx, formatKillLine(source, target), source.teamColor || '#82ffcf');
+        if (!meta.ctx.match.killLog) meta.ctx.match.killLog = [];
+        meta.ctx.match.killLog.push({
+          killerName: source.displayName || source.vehicle?.name || '?',
+          killerTeamId: source.teamId,
+          killerTeamColor: source.teamColor || '#82ffcf',
+          victimName: target.displayName || target.vehicle?.name || '?',
+          victimTeamId: target.teamId,
+          victimTeamColor: target.teamColor || '#ff5f7d',
+          weaponId: meta.weaponId || 'collision',
+          time: performance.now(),
+        });
+      }
     }
     const d6 = performance.now();
     console.log(`[DEATH] Total: ${(d6 - d0).toFixed(2)}ms | State: ${(d1 - d0).toFixed(2)}ms | RenderHide: ${(d2 - d1).toFixed(2)}ms | PerfCD: ${(d3 - d2).toFixed(2)}ms | Particles: ${(d4 - d3).toFixed(2)}ms | Camera: ${(d5 - d4).toFixed(2)}ms | KillFeed: ${(d6 - d5).toFixed(2)}ms`);

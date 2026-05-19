@@ -201,6 +201,7 @@ export function updatePickups(ctx, dt) {
           ctx.match.killBannerQueue.push({ line: `PICKED UP ${w.name.toUpperCase()}`, color: `#${w.color.toString(16).padStart(6, '0')}` });
         }
         pickup.pickup.respawn = 10;
+        if (vehicle.score) vehicle.score.weaponsPickedUp = (vehicle.score.weaponsPickedUp || 0) + 1;
         break;
       } else {
         // Max 2 special weapons — skip if already full
@@ -217,6 +218,7 @@ export function updatePickups(ctx, dt) {
            ctx.match.killBannerQueue.push({ line: `PICKED UP ${catalogWeapon.name.toUpperCase()}`, color: `#${catalogWeapon.color.toString(16).padStart(6, '0')}` });
         }
         pickup.pickup.respawn = 10;
+        if (vehicle.score) vehicle.score.weaponsPickedUp = (vehicle.score.weaponsPickedUp || 0) + 1;
         break;
       }
     }

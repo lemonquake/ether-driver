@@ -15,12 +15,15 @@ import { updateDamageVisuals } from './combat/DamageSystem.js';
 import { updateAI } from './ai/AISystem.js';
 import { generateNavigationGraph } from './ai/NavigationSystem.js';
 import { createRouteRecorder } from './ai/AIRouteRecorder.js';
-import { createHUD, drawMinimap, updateHUD } from './ui/HUDSystem.js';
+import { createHUD, drawMinimap, updateHUD, cleanupMVPPortrait } from './ui/HUDSystem.js';
 import { getVehicleStats } from './data/vehicleCatalog.js';
 import { buildGarageVehicleDefinition, garageMaterialStyles, garagePartCatalog, getGarageStats, loadGarageBlueprint, saveGarageBlueprint, sanitizeGarageBlueprint } from './data/vehicleParts.js';
 import { createDefaultMatchState, startMatch, updateMatch, clearVehicles } from './match/MatchSystem.js';
 import { cloneDefaultTeams } from './data/teams.js';
 import { createGaragePartPortraitGroup, createVehiclePreviewGroup } from './vehicles/VehicleFactory.js';
+import { loadProgression, buyPremiumPart, upgradeStat, UPGRADE_MAX_LEVELS, getExpRequirement } from './core/ProgressionSystem.js';
+import { premiumPartDefinitions, PREMIUM_RARITIES } from './data/premiumParts.js';
+import { GARAGE_BUILD_LIMIT, clearActiveGarageTemplateId, createGarageTemplate, deleteGarageTemplate, getActiveGarageTemplateId, loadGarageTemplates, recordGarageTemplateUse, refreshGarageCatalog, renameGarageTemplate, setActiveGarageTemplateId, updateGarageTemplate } from './data/vehicleParts.js';
 
 const canvas = document.querySelector('#game');
 const ctx = createGameContext(canvas);
@@ -28,6 +31,8 @@ const physics = await createRapierPhysics();
 const materials = createMaterials(ctx.renderer);
 const effects = createParticleSystem(ctx.scene);
 ctx.cameraEffects = createCameraEffects();
+ctx.materials = materials;
+ctx._vehicleFactory = { createVehiclePreviewGroup };
 ctx.match = createDefaultMatchState();
 const ui = createHUD(ctx);
 let routeRecorder;
@@ -38,21 +43,23 @@ let garageBlueprint = loadGarageBlueprint();
 let activeGarageCategory = 'chassis';
 let activeSetupStep = 'team';
 let garageFlash = { part: null, timer: 0 };
+let gameSetupKillLimit = 0;
+let gameSetupTeamKillLimit = 0;
 const pendingTeamColors = {};
 let activeColorPickerTeamId = null;
 const presetColors = [
-  '#82ffcf', // Aurora Mint
-  '#ff5f7d', // Crimson Pink
-  '#ffcc66', // Volt Gold
-  '#b991ff', // Phantom Violet
-  '#33bbff', // Sky Blue
-  '#ff8233', // Neon Orange
-  '#55ff55', // Acid Green
-  '#ff2200', // Crimson Red
-  '#ff00ff', // Hot Pink
-  '#ffd700', // Gold
-  '#00ffcc', // Aqua
-  '#ffffff'  // Pure White
+  '#00a7ff', // Ion Blue
+  '#ff2bd6', // Neon Magenta
+  '#ffe600', // Hazard Yellow
+  '#7c3cff', // Void Violet
+  '#00f0ff', // Arc Cyan
+  '#ff4a1c', // Reactor Orange
+  '#d7ff19', // Acid Signal
+  '#ff0055', // Laser Red
+  '#b300ff', // Ultraviolet
+  '#ffffff', // Pure White
+  '#151bff', // Deep Core
+  '#111827'  // Graphite
 ];
 const partSnapshotCache = new Map();
 let partSnapshotRenderer = null;
@@ -141,7 +148,7 @@ function renderTeamBuilder() {
       <div class="team-color-section">
         <span>Color</span>
         <div class="team-color-trigger-row">
-          <button type="button" class="team-color-trigger" data-team-color-trigger="${team.id}" style="background-color: ${pendingTeamColors[team.id] || team.color}" aria-label="Open color picker"></button>
+          <button type="button" class="team-color-trigger" data-team-color-trigger="${team.id}" style="--team-swatch:${pendingTeamColors[team.id] || team.color}; background-color: ${pendingTeamColors[team.id] || team.color}" aria-label="Open color picker"></button>
           <span class="team-color-hex-label">${(pendingTeamColors[team.id] || team.color).toUpperCase()}</span>
         </div>
         
@@ -149,7 +156,7 @@ function renderTeamBuilder() {
         <div class="team-color-picker-panel">
           <div class="preset-swatches">
             ${presetColors.map((c) => `
-              <button type="button" class="color-swatch ${c === (pendingTeamColors[team.id] || team.color) ? 'selected' : ''}" data-team-swatch="${team.id}" data-color="${c}" style="background-color: ${c}" aria-label="Select color ${c}"></button>
+              <button type="button" class="color-swatch ${c === (pendingTeamColors[team.id] || team.color) ? 'selected' : ''}" data-team-swatch="${team.id}" data-color="${c}" style="--swatch:${c}; background-color: ${c}" aria-label="Select color ${c}"></button>
             `).join('')}
           </div>
           <div class="custom-color-row">
@@ -298,6 +305,73 @@ function createGaragePreview() {
 }
 
 const garagePreview = createGaragePreview();
+
+function disposePreviewGroupGeometry(group) {
+  group?.traverse((item) => {
+    item.geometry?.dispose?.();
+  });
+}
+
+function createBuildPreviewManager() {
+  const items = new Map();
+  const disposeItem = (item) => {
+    if (!item) return;
+    item.scene.remove(item.group);
+    disposePreviewGroupGeometry(item.group);
+    item.renderer.dispose();
+  };
+  return {
+    clear() {
+      items.forEach(disposeItem);
+      items.clear();
+    },
+    register(canvasEl, key, blueprint) {
+      if (!canvasEl || !blueprint) return;
+      const renderer = new THREE.WebGLRenderer({ canvas: canvasEl, antialias: true, alpha: true });
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.18;
+
+      const scene = new THREE.Scene();
+      const camera = new THREE.PerspectiveCamera(34, 1, 0.1, 70);
+      camera.position.set(5.2, 3.3, 6);
+      camera.lookAt(0, 0.35, 0);
+      scene.add(new THREE.HemisphereLight(0xeaffff, 0x111419, 1.9));
+      const keyLight = new THREE.DirectionalLight(0xffffff, 2.3);
+      keyLight.position.set(4, 5, 4);
+      scene.add(keyLight);
+      const rim = new THREE.PointLight(0x82ffcf, 1.6, 10);
+      rim.position.set(-3.4, 2, -3.2);
+      scene.add(rim);
+
+      const preview = createVehiclePreviewGroup(materials, blueprint);
+      preview.group.position.set(0, -0.34, 0);
+      scene.add(preview.group);
+      items.set(key, { canvasEl, renderer, scene, camera, group: preview.group, time: Math.random() * Math.PI * 2 });
+    },
+    update(dt) {
+      items.forEach((item, key) => {
+        if (!item.canvasEl.isConnected) {
+          disposeItem(item);
+          items.delete(key);
+          return;
+        }
+        const width = Math.max(180, item.canvasEl.clientWidth || 220);
+        const height = Math.max(150, item.canvasEl.clientHeight || 180);
+        item.renderer.setSize(width, height, false);
+        item.camera.aspect = width / height;
+        item.camera.updateProjectionMatrix();
+        item.time += dt;
+        item.group.rotation.set(-0.08, item.time * 0.5, 0);
+        item.group.position.y = -0.34 + Math.sin(item.time * 1.8) * 0.025;
+        item.renderer.render(item.scene, item.camera);
+      });
+    },
+  };
+}
+
+const buildPreviewManager = createBuildPreviewManager();
 
 function rebuildGaragePreview() {
   if (!garagePreview) return;
@@ -605,7 +679,8 @@ function renderGarageBuilder() {
   garageBlueprint = sanitizeGarageBlueprint(garageBlueprint);
   const def = buildGarageVehicleDefinition(garageBlueprint);
   const currentCategory = garageCategories.find((item) => item.key === activeGarageCategory) || garageCategories[0];
-  if (ui.garageTitle) ui.garageTitle.textContent = def.name;
+  const editingTemplate = getEditingTemplate();
+  if (ui.garageTitle) ui.garageTitle.textContent = editingTemplate ? `${editingTemplate.name}${garageBuildDirty ? ' *' : ''}` : def.name;
   ui.garageControls.innerHTML = `
     <div class="garage-tabs">
       ${garageCategories.map((cat) => `<button type="button" class="${cat.key === currentCategory.key ? 'selected' : ''}" data-garage-category="${cat.key}">${cat.label}</button>`).join('')}
@@ -651,6 +726,7 @@ function renderGarageBuilder() {
   saveGarageBlueprint(garageBlueprint);
   rebuildGaragePreview();
   updatePartSnapshots(currentCategory);
+  refreshGarageBuildActions();
 }
 
 function readMatchOptions() {
@@ -660,6 +736,8 @@ function readMatchOptions() {
     teams: setupTeams,
     playerTeamId: setupPlayerTeamId,
     playerBlueprint: garageBlueprint,
+    killLimit: gameSetupKillLimit,
+    teamKillLimit: gameSetupTeamKillLimit,
     enabledWeapons: enabledWeapons.length ? enabledWeapons : ['boom-missile', 'bouncy-wouncy', 'shock-lance', 'fire-mine', 'swarm-missiles', 'gravity-imploder', 'rail-slug', 'toxic-cask', 'devastator-nuke'],
   };
 }
@@ -668,16 +746,608 @@ function renderSetupStep(step = activeSetupStep) {
   activeSetupStep = step;
   ui.teamSetupStep?.classList.toggle('active', step === 'team');
   ui.garagePanel?.classList.toggle('active', step === 'vehicle');
+  ui.gameSetupStep?.classList.toggle('active', step === 'game');
+  document.getElementById('shopMenuStep')?.classList.toggle('active', step === 'shop');
   ui.matchMenu?.classList.toggle('vehicle-mode', step === 'vehicle');
+  ui.matchMenu?.classList.toggle('game-mode', step === 'game');
+  ui.matchMenu?.classList.toggle('shop-mode', step === 'shop');
+  refreshQuickTips();
 }
 
 function openMenu(paused = true) {
+  document.getElementById('mainMenuScreen')?.classList.remove('active');
   ui.matchMenu.classList.remove('hidden');
   renderSetupStep('team');
   if (ctx.match.active) ctx.match.paused = paused;
 }
 
+function openMainMenu() {
+  document.getElementById('mainMenuScreen')?.classList.add('active');
+  ui.matchMenu.classList.add('hidden');
+  refreshQuickTips();
+}
+
+const QUICK_TIPS_ENABLED_KEY = 'ether-driver.quickTips.enabled.v1';
+const QUICK_TIPS_DISMISSED_KEY = 'ether-driver.quickTips.dismissed.session.v1';
+sessionStorage.removeItem(QUICK_TIPS_DISMISSED_KEY);
+const quickTips = [
+  { id: 'vehicle-builds-access', context: ['vehicle'], target: '#openBuildsFromGarageButton', title: 'Vehicle Builds', body: 'Open Vehicle Builds here to save, load, and edit tuned templates without leaving setup.' },
+  { id: 'builds-save-load', context: ['builds', 'main'], target: '#navVehicleBuildsButton, #templatesModal .modal-header h2', title: 'Save Templates', body: 'Vehicle Builds stores complete part, paint, and stat setups so you can return to a favorite driver fast.' },
+  { id: 'builds-rename', context: ['builds'], target: '[data-build-name-input]', title: 'Rename Builds', body: 'Click a saved build name, type a clearer label, then press Enter or click away to save it.' },
+  { id: 'builds-edit', context: ['builds'], target: '[data-template-edit]', title: 'Edit Saved Builds', body: 'Edit loads that saved build into the garage. Your slot is not overwritten until you press Save Changes.' },
+  { id: 'builds-save-changes', context: ['vehicle'], target: '#saveEditedBuildButton', title: 'Save Changes', body: 'After editing a saved build, this button updates the same slot while keeping its history stats.' },
+  { id: 'builds-save-variant', context: ['vehicle'], target: '#saveBuildVariantButton', title: 'Save As New', body: 'Use Save As New when you want a speed, armor, or paint variant without replacing the original.' },
+  { id: 'match-exp', context: ['game', 'results', 'play'], target: '#startMatchButton, #resultsRewards, #quickTipsToggle', title: 'Match EXP', body: 'Every match pays lifetime EXP, so experimenting still moves your profile forward.' },
+  { id: 'match-gold', context: ['shop', 'results', 'play'], target: '#shopStatsHeader, #resultsRewards, #quickTipsToggle', title: 'Gold Rewards', body: 'Gold comes from match rewards and combat performance, then funds premium parts and upgrades.' },
+  { id: 'turret-hit-rewards', context: ['play', 'results'], target: '#weaponPanel, #resultsRewards', title: 'Hit Rewards', body: 'Turret hits and weapon hits add extra reward lines. Accurate pressure pays even before a kill.' },
+  { id: 'kill-rewards', context: ['play', 'results'], target: '#killFeed, #resultsRewards', title: 'Kill Rewards', body: 'Kills add bonus EXP and Gold, but assists through damage still help your match total.' },
+  { id: 'lifetime-achievements', context: ['main', 'results'], target: '#navAchievementsButton, #resultsBody', title: 'Lifetime Stats', body: 'Lifetime Achievements track wins, damage, kills, EXP, and Gold across all plays.' },
+  { id: 'premium-shop', context: ['team', 'shop', 'main'], target: '#openShopFromMenuButton, #navPremiumShopButton', title: 'Spend Gold', body: 'The shop converts earned Gold into premium parts and stat upgrades for future builds.' },
+  { id: 'level-stat-points', context: ['shop', 'results'], target: '#shopStatsHeader, #resultsRewards', title: 'Level Ups', body: 'Leveling up grants stat points. Spend them on upgrades that fit how you drive and fight.' },
+  { id: 'handling-upgrade', context: ['shop'], target: '[data-upgrade-stat=\"handling\"]', title: 'Handling Upgrade', body: 'Handling upgrades make fast builds easier to correct after slides, impacts, and hard turns.' },
+  { id: 'firing-upgrade', context: ['shop'], target: '[data-upgrade-stat=\"firingRate\"]', title: 'Firing Rate', body: 'Firing Rate upgrades reduce turret downtime, which helps veteran players keep pressure on targets.' },
+  { id: 'ammo-upgrade', context: ['shop'], target: '[data-upgrade-stat=\"maxAmmo\"]', title: 'Max Ammo', body: 'Max Ammo upgrades support longer fights and make missed shots less punishing.' },
+  { id: 'heavy-armor', context: ['vehicle'], target: '[data-garage-category=\"armor\"]', title: 'Heavy Armor', body: 'Heavy armor survives longer and rams better, but the speed and launch tradeoffs are real.' },
+  { id: 'light-builds', context: ['vehicle'], target: '[data-garage-category=\"chassis\"]', title: 'Light Builds', body: 'Light frames reward clean lanes, quick pickups, and spacing. Avoid trading hits for free.' },
+  { id: 'turret-rate', context: ['vehicle'], target: '[data-garage-category=\"turret\"]', title: 'Turret Turn Rate', body: 'Turret turn rate matters most in close fights where targets cross your aim quickly.' },
+  { id: 'team-kill-limit', context: ['game'], target: '.team-kill-limit-options', title: 'Team Kill Limit', body: 'Team Kill Limit creates a cleaner team objective than individual kills when squads are large.' },
+  { id: 'pickup-toggles', context: ['team'], target: '.weapon-fieldset', title: 'Pickup Weapons', body: 'Disable specific pickups to tune chaos, practice fundamentals, or create a focused ruleset.' },
+  { id: 'scoreboard', context: ['play'], target: '#scoreboard', title: 'Scoreboard Momentum', body: 'Open the scoreboard to read team kills, damage, weapon loadouts, and who needs help.' },
+  { id: 'results-breakdown', context: ['results'], target: '#resultsRewards', title: 'Reward Breakdown', body: 'Match results show exactly where EXP and Gold came from, including hits, kills, and completion.' },
+  { id: 'quick-tips-toggle', context: ['main', 'team', 'vehicle', 'game', 'shop', 'builds', 'settings', 'play'], target: '#quickTipsToggle', title: 'Quick Tips Control', body: 'Turn Quick Tips back on from the top-left button or from Options whenever you want guidance again.' },
+];
+
+let quickTipIndex = 0;
+let quickTipTimer = 0;
+let activeQuickTipId = '';
+
+function readQuickTipsEnabled() {
+  return localStorage.getItem(QUICK_TIPS_ENABLED_KEY) !== 'false';
+}
+
+function setQuickTipsEnabled(enabled) {
+  localStorage.setItem(QUICK_TIPS_ENABLED_KEY, enabled ? 'true' : 'false');
+  syncQuickTipsControls();
+  refreshQuickTips();
+}
+
+function readDismissedQuickTips() {
+  try {
+    return new Set(JSON.parse(sessionStorage.getItem(QUICK_TIPS_DISMISSED_KEY) || '[]'));
+  } catch {
+    return new Set();
+  }
+}
+
+function dismissQuickTip(tipId) {
+  const dismissed = readDismissedQuickTips();
+  dismissed.add(tipId);
+  sessionStorage.setItem(QUICK_TIPS_DISMISSED_KEY, JSON.stringify([...dismissed]));
+  activeQuickTipId = '';
+  quickTipIndex += 1;
+  refreshQuickTips();
+}
+
+function syncQuickTipsControls() {
+  const enabled = readQuickTipsEnabled();
+  const toggle = document.getElementById('quickTipsToggle');
+  const settingsToggle = document.getElementById('quickTipsSettingsToggle');
+  if (toggle) {
+    toggle.classList.toggle('off', !enabled);
+    toggle.setAttribute('aria-pressed', enabled ? 'true' : 'false');
+    toggle.textContent = enabled ? 'Quick Tips' : 'Tips Off';
+  }
+  if (settingsToggle) settingsToggle.checked = enabled;
+}
+
+function currentQuickTipContext() {
+  if (!document.getElementById('templatesModal')?.classList.contains('hidden')) return 'builds';
+  if (!ui.settingsMenu?.classList.contains('hidden')) return 'settings';
+  if (ui.resultsOverlay?.classList.contains('visible')) return 'results';
+  if (document.getElementById('mainMenuScreen')?.classList.contains('active')) return 'main';
+  if (!ui.matchMenu?.classList.contains('hidden')) return activeSetupStep;
+  return 'play';
+}
+
+function resolveTipTarget(selectorList, fallback = true) {
+  const isVisible = (el) => {
+    if (el.closest('.hidden')) return false;
+    const mainMenu = el.closest('#mainMenuScreen');
+    if (mainMenu && !mainMenu.classList.contains('active')) return false;
+    const matchMenu = el.closest('#matchMenu');
+    if (matchMenu && matchMenu.classList.contains('hidden')) return false;
+    const modal = el.closest('.modal-overlay');
+    if (modal && modal.classList.contains('hidden')) return false;
+    const style = window.getComputedStyle(el);
+    return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) !== 0;
+  };
+  const target = selectorList
+    .split(',')
+    .map((selector) => document.querySelector(selector.trim()))
+    .find((el) => {
+      if (!el || !isVisible(el)) return false;
+      const rect = el.getBoundingClientRect();
+      return rect.width > 0 && rect.height > 0;
+    });
+  return target || (fallback ? document.getElementById('quickTipsToggle') : null);
+}
+
+function renderQuickTip(tip, target) {
+  const layer = document.getElementById('quickTipsLayer');
+  if (!layer || !target) return;
+  const rect = target.getBoundingClientRect();
+  const vw = window.innerWidth;
+  const vh = window.innerHeight;
+  const width = Math.min(320, Math.max(230, vw - 32));
+  const preferRight = rect.left + rect.width + width + 24 < vw;
+  const preferLeft = rect.left - width - 24 > 0;
+  const left = preferRight ? rect.right + 12 : preferLeft ? rect.left - width - 12 : Math.min(Math.max(16, rect.left), vw - width - 16);
+  const below = rect.top < vh * 0.55;
+  const top = below ? Math.min(rect.bottom + 12, vh - 150) : Math.max(72, rect.top - 136);
+  layer.innerHTML = `
+    <span class="quick-tip-spotlight" style="left:${Math.max(8, rect.left - 8)}px;top:${Math.max(8, rect.top - 8)}px;width:${rect.width + 16}px;height:${rect.height + 16}px"></span>
+    <article class="quick-tip-card" style="left:${left}px;top:${top}px;width:${width}px">
+      <header>
+        <strong>${esc(tip.title)}</strong>
+        <button type="button" data-quick-tip-dismiss="${esc(tip.id)}" aria-label="Dismiss quick tip">&#10003;</button>
+      </header>
+      <p>${esc(tip.body)}</p>
+    </article>
+  `;
+}
+
+function refreshQuickTips() {
+  const layer = document.getElementById('quickTipsLayer');
+  if (!layer) return;
+  syncQuickTipsControls();
+  if (!readQuickTipsEnabled()) {
+    layer.innerHTML = '';
+    return;
+  }
+  const context = currentQuickTipContext();
+  const dismissed = readDismissedQuickTips();
+  const available = quickTips.filter((tip) => tip.context.includes(context) && !dismissed.has(tip.id) && resolveTipTarget(tip.target, false));
+  if (!available.length) {
+    layer.innerHTML = '';
+    return;
+  }
+  const tip = available[quickTipIndex % available.length];
+  const target = resolveTipTarget(tip.target);
+  activeQuickTipId = tip.id;
+  renderQuickTip(tip, target);
+}
+
+function setupCyberMenuInteractions() {
+  const mainMenu = document.getElementById('mainMenuScreen');
+  const pressTargets = '.main-nav-btn, .menu-panel button, .pause-actions button, .shop-tabs button, .modal-panel button, .results-actions button';
+
+  const triggerPress = (button) => {
+    if (!button || button.disabled || button.classList.contains('disabled')) return;
+    button.classList.remove('is-gear-press');
+    void button.offsetWidth;
+    button.classList.add('is-gear-press');
+    window.setTimeout(() => button.classList.remove('is-gear-press'), 520);
+  };
+
+  document.querySelectorAll(pressTargets).forEach((button) => {
+    button.addEventListener('pointerdown', () => triggerPress(button));
+    button.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') triggerPress(button);
+    });
+  });
+
+  mainMenu?.addEventListener('pointermove', (event) => {
+    const rect = mainMenu.getBoundingClientRect();
+    const x = ((event.clientX - rect.left) / Math.max(1, rect.width) - 0.5).toFixed(3);
+    const y = ((event.clientY - rect.top) / Math.max(1, rect.height) - 0.5).toFixed(3);
+    mainMenu.style.setProperty('--cursor-x', x);
+    mainMenu.style.setProperty('--cursor-y', y);
+  });
+}
+
+setupCyberMenuInteractions();
+
+// Main Menu Navigation
+document.getElementById('navCustomMatchButton')?.addEventListener('click', () => {
+  openMenu(false);
+});
+
+document.getElementById('navPremiumShopButton')?.addEventListener('click', () => {
+  shopOrigin = 'main';
+  openMenu(false);
+  renderSetupStep('shop');
+  renderShop();
+});
+
+document.getElementById('navVehicleBuildsButton')?.addEventListener('click', () => {
+  openTemplatesModal();
+});
+
+document.getElementById('navAchievementsButton')?.addEventListener('click', () => {
+  document.getElementById('achievementsModal')?.classList.remove('hidden');
+  renderAchievementsModal();
+});
+
+document.getElementById('closeAchievementsButton')?.addEventListener('click', () => {
+  document.getElementById('achievementsModal')?.classList.add('hidden');
+  refreshQuickTips();
+});
+
+document.getElementById('closeTemplatesButton')?.addEventListener('click', () => {
+  document.getElementById('templatesModal')?.classList.add('hidden');
+  buildPreviewManager.clear();
+  refreshQuickTips();
+});
+
+let pendingBuildLoadId = null;
+let editingGarageTemplateId = '';
+let garageBuildDirty = false;
+
+function cloneBlueprint(blueprint) {
+  return JSON.parse(JSON.stringify(sanitizeGarageBlueprint(blueprint)));
+}
+
+function getEditingTemplate() {
+  if (!editingGarageTemplateId) return null;
+  return loadGarageTemplates().find((template) => template.id === editingGarageTemplateId) || null;
+}
+
+function refreshGarageBuildActions() {
+  const editButton = document.getElementById('saveEditedBuildButton');
+  const variantButton = document.getElementById('saveBuildVariantButton');
+  const editingTemplate = getEditingTemplate();
+  if (editButton) {
+    editButton.disabled = !editingTemplate || !garageBuildDirty;
+    editButton.textContent = editingTemplate ? (garageBuildDirty ? 'Save Changes' : 'Saved') : 'Save Changes';
+  }
+  if (variantButton) {
+    variantButton.disabled = loadGarageTemplates().length >= GARAGE_BUILD_LIMIT;
+  }
+}
+
+function setGarageEditingTemplate(template, { dirty = false } = {}) {
+  editingGarageTemplateId = template?.id || '';
+  garageBuildDirty = Boolean(dirty);
+  if (template && !garageBuildDirty) setActiveGarageTemplateId(template.id);
+  if (!template) clearActiveGarageTemplateId();
+  refreshGarageBuildActions();
+}
+
+function openTemplatesModal() {
+  pendingBuildLoadId = null;
+  document.getElementById('templatesModal')?.classList.remove('hidden');
+  renderTemplatesModal();
+  refreshQuickTips();
+}
+
+function renderAchievementsModal() {
+  const state = loadProgression();
+  const ls = state.lifetimeStats || {};
+  document.getElementById('achievementsGrid').innerHTML = `
+    <div class="achievement-card"><span>Damage Dealt</span><strong>${Math.round(ls.damageDealt || 0)}</strong></div>
+    <div class="achievement-card"><span>Kills</span><strong>${ls.kills || 0}</strong></div>
+    <div class="achievement-card"><span>Deaths</span><strong>${ls.deaths || 0}</strong></div>
+    <div class="achievement-card"><span>Game Wins</span><strong>${ls.gameWins || 0}</strong></div>
+    <div class="achievement-card"><span>Gold Gained</span><strong>${ls.goldGained || 0}</strong></div>
+    <div class="achievement-card"><span>Gold Spent</span><strong>${ls.goldSpent || 0}</strong></div>
+    <div class="achievement-card"><span>EXP Gained</span><strong>${ls.expGained || 0}</strong></div>
+  `;
+}
+
+function renderBuildPerformanceStats(blueprint) {
+  const stats = getGarageStats(blueprint);
+  return renderGarageStats(stats);
+}
+
+function renderBuildHistoryStats(stats = {}) {
+  const rows = [
+    ['Uses', stats.uses || 0],
+    ['Kills', stats.kills || 0],
+    ['Deaths', stats.deaths || 0],
+    ['Damage', Math.round(stats.damage || 0)],
+    ['Wins', stats.wins || 0],
+    ['Pickups', stats.pickups || 0],
+    ['Turbo', stats.turbo || 0],
+    ['Jump', stats.jump || 0],
+  ];
+  return rows.map(([label, value]) => `
+    <span class="build-history-stat">
+      <b>${esc(value)}</b>
+      <em>${esc(label)}</em>
+    </span>
+  `).join('');
+}
+
+function renderBuildSlot(template, index, activeBuildId) {
+  if (!template) {
+    return `
+      <article class="vehicle-build-card empty-build-slot">
+        <div class="build-slot-number">#${index + 1}</div>
+        <div class="build-empty-pedestal">
+          <span></span>
+        </div>
+        <h4>Empty Build Slot</h4>
+        <p>Save your Current Build to place a vehicle here.</p>
+        <button type="button" data-save-current-build>Save Current Build</button>
+      </article>
+    `;
+  }
+  const def = buildGarageVehicleDefinition(template.blueprint);
+  const isActive = template.id === activeBuildId;
+  const isPending = template.id === pendingBuildLoadId;
+  const isEditing = template.id === editingGarageTemplateId;
+  const title = template.name || def.name;
+  return `
+    <article class="vehicle-build-card ${isActive ? 'active-build' : ''} ${isPending ? 'confirming' : ''} ${isEditing ? 'editing-build' : ''}" data-build-id="${esc(template.id)}">
+      <div class="build-slot-number">#${index + 1}</div>
+      <div class="build-preview-shell">
+        <canvas class="build-preview-canvas" data-build-preview="${esc(template.id)}"></canvas>
+      </div>
+      <header>
+        <span>${isEditing ? (garageBuildDirty ? 'Editing - Unsaved' : 'Editing') : isActive ? 'Current Build' : 'Saved Build'}</span>
+        <input type="text" class="build-name-input" data-build-name-input="${esc(template.id)}" value="${esc(title)}" maxlength="24" readonly aria-label="Rename ${esc(title)}" />
+      </header>
+      <div class="build-performance">${renderBuildPerformanceStats(template.blueprint)}</div>
+      <div class="build-history-grid">${renderBuildHistoryStats(template.stats)}</div>
+      <div class="build-card-actions">
+        ${isPending ? `
+          <button type="button" class="template-load-btn" data-confirm-build="${esc(template.id)}">Confirm</button>
+          <button type="button" data-cancel-build-load>Cancel</button>
+        ` : `
+          <button type="button" data-template-edit="${esc(template.id)}">Edit</button>
+          <button type="button" class="template-load-btn" data-template-load="${esc(template.id)}">Use</button>
+          <button type="button" class="template-delete-btn" data-template-delete="${esc(template.id)}">Delete</button>
+        `}
+      </div>
+    </article>
+  `;
+}
+
+function renderCurrentBuildPanel(templates) {
+  const activeBuildId = getActiveGarageTemplateId();
+  const activeTemplate = templates.find((template) => template.id === activeBuildId);
+  const editingTemplate = getEditingTemplate();
+  const def = buildGarageVehicleDefinition(garageBlueprint);
+  const displayName = editingTemplate?.name || activeTemplate?.name || def.name;
+  const status = editingTemplate
+    ? (garageBuildDirty ? 'Editing saved build - unsaved changes' : 'Editing saved build')
+    : activeTemplate ? 'Loaded from saved build' : 'Default or unsaved custom build';
+  return `
+    <article class="vehicle-build-card current-build-card">
+      <div class="build-preview-shell">
+        <canvas class="build-preview-canvas" data-build-preview="current"></canvas>
+      </div>
+      <div class="current-build-copy">
+        <p class="menu-kicker">Current Build</p>
+        <h3>${esc(displayName)}</h3>
+        <span>${esc(status)}</span>
+        <div class="build-performance">${renderBuildPerformanceStats(garageBlueprint)}</div>
+      </div>
+    </article>
+  `;
+}
+
+function renderTemplatesModal() {
+  const templates = loadGarageTemplates();
+  const activeBuildId = getActiveGarageTemplateId();
+  const currentPanel = document.getElementById('currentBuildPanel');
+  const grid = document.getElementById('templatesGrid');
+  if (currentPanel) currentPanel.innerHTML = renderCurrentBuildPanel(templates);
+  if (grid) {
+    grid.innerHTML = Array.from({ length: GARAGE_BUILD_LIMIT }, (_, index) => renderBuildSlot(templates[index], index, activeBuildId)).join('');
+  }
+  buildPreviewManager.clear();
+  document.querySelectorAll('[data-build-preview]').forEach((canvasEl) => {
+    const key = canvasEl.dataset.buildPreview;
+    const template = templates.find((item) => item.id === key);
+    buildPreviewManager.register(canvasEl, key, key === 'current' ? garageBlueprint : template?.blueprint);
+  });
+  refreshGarageBuildActions();
+}
+
+function saveCurrentBuildToSlot() {
+  const templates = loadGarageTemplates();
+  if (templates.length >= GARAGE_BUILD_LIMIT) {
+    alert("Maximum 10 templates allowed. Delete one first.");
+    return;
+  }
+  const name = document.getElementById('templateNameInput').value.trim() || 'My Build';
+  saveGarageBlueprint(garageBlueprint);
+  const template = createGarageTemplate(name, cloneBlueprint(garageBlueprint));
+  if (template) setGarageEditingTemplate(template, { dirty: false });
+  document.getElementById('templateNameInput').value = '';
+  pendingBuildLoadId = null;
+  renderTemplatesModal();
+  renderGarageBuilder();
+}
+
+function saveGarageBuildVariant() {
+  const editingTemplate = getEditingTemplate();
+  const fallbackName = editingTemplate?.name || buildGarageVehicleDefinition(garageBlueprint).name || 'My Build';
+  const inputName = document.getElementById('templateNameInput')?.value?.trim();
+  const template = createGarageTemplate(inputName || `${fallbackName} Copy`, cloneBlueprint(garageBlueprint));
+  if (!template) {
+    alert("Maximum 10 templates allowed. Delete one first.");
+    return;
+  }
+  document.getElementById('templateNameInput').value = '';
+  setGarageEditingTemplate(template, { dirty: false });
+  saveGarageBlueprint(garageBlueprint);
+  pendingBuildLoadId = null;
+  renderGarageBuilder();
+  renderTemplatesModal();
+}
+
+function saveEditedGarageBuild() {
+  const editingTemplate = getEditingTemplate();
+  if (!editingTemplate || !garageBuildDirty) return;
+  const template = updateGarageTemplate(editingTemplate.id, { blueprint: cloneBlueprint(garageBlueprint) });
+  if (!template) return;
+  setGarageEditingTemplate(template, { dirty: false });
+  saveGarageBlueprint(garageBlueprint);
+  pendingBuildLoadId = null;
+  renderGarageBuilder();
+  renderTemplatesModal();
+}
+
+function loadTemplateIntoGarage(template, { editing = false } = {}) {
+  if (!template) return;
+  garageBlueprint = cloneBlueprint(template.blueprint);
+  saveGarageBlueprint(garageBlueprint);
+  pendingBuildLoadId = null;
+  setGarageEditingTemplate(editing ? template : null, { dirty: false });
+  if (!editing) setActiveGarageTemplateId(template.id);
+  renderGarageBuilder();
+}
+
+document.getElementById('saveTemplateButton')?.addEventListener('click', () => {
+  saveCurrentBuildToSlot();
+});
+
+document.getElementById('saveEditedBuildButton')?.addEventListener('click', () => {
+  saveEditedGarageBuild();
+});
+
+document.getElementById('saveBuildVariantButton')?.addEventListener('click', () => {
+  saveGarageBuildVariant();
+});
+
+document.getElementById('openBuildsFromGarageButton')?.addEventListener('click', () => {
+  openTemplatesModal();
+});
+
+document.getElementById('quickTipsToggle')?.addEventListener('click', () => {
+  setQuickTipsEnabled(!readQuickTipsEnabled());
+});
+
+document.getElementById('quickTipsSettingsToggle')?.addEventListener('change', (event) => {
+  setQuickTipsEnabled(event.target.checked);
+});
+
+document.getElementById('quickTipsLayer')?.addEventListener('click', (event) => {
+  const dismissButton = event.target.closest('[data-quick-tip-dismiss]');
+  if (!dismissButton) return;
+  dismissQuickTip(dismissButton.dataset.quickTipDismiss);
+});
+
+document.getElementById('templatesGrid')?.addEventListener('click', (e) => {
+  const templates = loadGarageTemplates();
+  const saveButton = e.target.closest('[data-save-current-build]');
+  const nameInput = e.target.closest('[data-build-name-input]');
+  const editButton = e.target.closest('[data-template-edit]');
+  const requestLoadButton = e.target.closest('[data-template-load]');
+  const confirmButton = e.target.closest('[data-confirm-build]');
+  const cancelButton = e.target.closest('[data-cancel-build-load]');
+  const deleteButton = e.target.closest('[data-template-delete]');
+  const buildCard = e.target.closest('[data-build-id]');
+
+  if (nameInput) {
+    e.stopPropagation();
+    nameInput.dataset.originalName = nameInput.value;
+    nameInput.readOnly = false;
+    nameInput.focus();
+    nameInput.select();
+  } else if (saveButton) {
+    saveCurrentBuildToSlot();
+  } else if (editButton) {
+    const template = templates.find((item) => item.id === editButton.dataset.templateEdit);
+    if (!template) return;
+    loadTemplateIntoGarage(template, { editing: true });
+    document.getElementById('templatesModal')?.classList.add('hidden');
+    buildPreviewManager.clear();
+    if (ui.matchMenu.classList.contains('hidden')) openMenu(false);
+    renderSetupStep('vehicle');
+  } else if (requestLoadButton) {
+    pendingBuildLoadId = requestLoadButton.dataset.templateLoad;
+    renderTemplatesModal();
+  } else if (confirmButton) {
+    const template = templates.find((item) => item.id === confirmButton.dataset.confirmBuild);
+    if (!template) return;
+    loadTemplateIntoGarage(template, { editing: false });
+    renderTemplatesModal();
+  } else if (cancelButton) {
+    pendingBuildLoadId = null;
+    renderTemplatesModal();
+  } else if (deleteButton) {
+    if (editingGarageTemplateId === deleteButton.dataset.templateDelete) {
+      setGarageEditingTemplate(null, { dirty: false });
+      garageBuildDirty = false;
+    }
+    deleteGarageTemplate(deleteButton.dataset.templateDelete);
+    if (pendingBuildLoadId === deleteButton.dataset.templateDelete) pendingBuildLoadId = null;
+    renderGarageBuilder();
+    renderTemplatesModal();
+  } else if (buildCard && buildCard.dataset.buildId) {
+    pendingBuildLoadId = buildCard.dataset.buildId;
+    renderTemplatesModal();
+  }
+});
+
+document.getElementById('templatesGrid')?.addEventListener('keydown', (e) => {
+  const input = e.target.closest('[data-build-name-input]');
+  if (!input) return;
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    input.blur();
+  }
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    input.value = input.dataset.originalName || input.defaultValue;
+    input.dataset.cancelRename = 'true';
+    input.blur();
+  }
+});
+
+document.getElementById('templatesGrid')?.addEventListener('focusout', (e) => {
+  const input = e.target.closest('[data-build-name-input]');
+  if (!input || input.readOnly) return;
+  const buildId = input.dataset.buildNameInput;
+  const cancelled = input.dataset.cancelRename === 'true';
+  const nextName = input.value.trim();
+  input.readOnly = true;
+  delete input.dataset.cancelRename;
+  if (cancelled || !nextName) {
+    input.value = input.dataset.originalName || input.defaultValue;
+    return;
+  }
+  const template = renameGarageTemplate(buildId, nextName);
+  if (template && editingGarageTemplateId === buildId) renderGarageBuilder();
+  renderTemplatesModal();
+});
+
+function markGarageBlueprintEdited() {
+  garageBuildDirty = Boolean(editingGarageTemplateId);
+  clearActiveGarageTemplateId();
+  pendingBuildLoadId = null;
+  refreshGarageBuildActions();
+}
+
+function compressImageFileForStorage(file, maxSize = 512, quality = 0.78) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    const objectUrl = URL.createObjectURL(file);
+    image.onload = () => {
+      URL.revokeObjectURL(objectUrl);
+      const scale = Math.min(1, maxSize / Math.max(image.naturalWidth || image.width, image.naturalHeight || image.height));
+      const canvasEl = document.createElement('canvas');
+      canvasEl.width = Math.max(1, Math.round((image.naturalWidth || image.width) * scale));
+      canvasEl.height = Math.max(1, Math.round((image.naturalHeight || image.height) * scale));
+      const c = canvasEl.getContext('2d');
+      c.drawImage(image, 0, 0, canvasEl.width, canvasEl.height);
+      let dataUrl = canvasEl.toDataURL('image/webp', quality);
+      if (!dataUrl.startsWith('data:image/webp')) dataUrl = canvasEl.toDataURL('image/jpeg', quality);
+      resolve(dataUrl);
+    };
+    image.onerror = () => {
+      URL.revokeObjectURL(objectUrl);
+      reject(new Error('Could not read imported texture image.'));
+    };
+    image.src = objectUrl;
+  });
+}
+
 function beginMatch() {
+  recordGarageTemplateUse();
   startMatch(ctx, materials, readMatchOptions(), physics);
   ui.matchMenu.classList.add('hidden');
   ui.resultsOverlay.classList.remove('visible');
@@ -686,11 +1356,173 @@ function beginMatch() {
 }
 
 ui.startMatchButton.addEventListener('click', beginMatch);
+document.getElementById('backToMainMenuFromSetupButton')?.addEventListener('click', () => {
+  openMainMenu();
+});
 ui.continueToGarageButton?.addEventListener('click', () => renderSetupStep('vehicle'));
 ui.backToTeamButton?.addEventListener('click', () => renderSetupStep('team'));
-ui.restartMatchButton.addEventListener('click', () => {
+ui.continueToGameButton?.addEventListener('click', () => renderSetupStep('game'));
+ui.backToGarageButton?.addEventListener('click', () => renderSetupStep('vehicle'));
+
+function closeMatchResults() {
+  cleanupMVPPortrait();
   ui.resultsOverlay.classList.remove('visible');
+  ctx.match.ended = false;
+  ctx.match.active = false;
+}
+
+ui.restartMatchButton.addEventListener('click', () => {
+  closeMatchResults();
   openMenu(false);
+});
+
+ui.resultsMainMenuButton?.addEventListener('click', () => {
+  closeMatchResults();
+  openMainMenu();
+});
+
+let activeShopTab = 'upgrades';
+
+function renderShop() {
+  const progression = loadProgression();
+  const header = document.getElementById('shopStatsHeader');
+  if (header) {
+    const expReq = getExpRequirement(progression.level);
+    header.innerHTML = `
+      <span class="shop-stats-level">LVL <b>${progression.level}</b></span>
+      <span>EXP <b>${progression.exp} / ${expReq}</b></span>
+      <span class="shop-stats-gold">GOLD <b>${progression.gold}</b></span>
+      <span>PTS <b>${progression.statPoints}</b></span>
+    `;
+  }
+  
+  const tabs = document.querySelectorAll('.shop-tabs button');
+  tabs.forEach(tab => tab.classList.toggle('selected', tab.dataset.shopTab === activeShopTab));
+  
+  const grid = document.getElementById('shopGrid');
+  if (!grid) return;
+  
+    if (activeShopTab === 'upgrades') {
+    const renderUpgrade = (key, label, max) => {
+      const current = progression.upgrades[key] || 0;
+      const pct = (current / max) * 100;
+      const canUpgrade = progression.statPoints > 0 && current < max;
+      return `
+        <div class="shop-card upgrade-card">
+          <h4>${label}</h4>
+          <div class="upgrade-level">${current} / ${max}</div>
+          <div class="upgrade-progress"><div style="width: ${pct}%"></div></div>
+          <button type="button" class="shop-buy-btn" data-upgrade-stat="${key}" ${canUpgrade ? '' : 'disabled'}>
+            Upgrade (1 PT)
+          </button>
+        </div>
+      `;
+    };
+    grid.innerHTML = `
+      ${renderUpgrade('handling', 'Handling', UPGRADE_MAX_LEVELS.handling)}
+      ${renderUpgrade('acceleration', 'Acceleration', UPGRADE_MAX_LEVELS.acceleration)}
+      ${renderUpgrade('maxAmmo', 'Max Ammo', UPGRADE_MAX_LEVELS.maxAmmo)}
+      ${renderUpgrade('firingRate', 'Firing Rate', UPGRADE_MAX_LEVELS.firingRate)}
+    `;
+  } else {
+    const parts = premiumPartDefinitions.filter(p => p.type === activeShopTab);
+    grid.innerHTML = parts.map(part => {
+      const rarityDef = PREMIUM_RARITIES[part.rarity.toUpperCase()];
+      const owned = progression.inventory.includes(part.id);
+      const canAfford = progression.gold >= part.price;
+      const statsHtml = Object.entries(part.stats || {}).map(([k, v]) => {
+        const sign = v > 0 ? '+' : '';
+        const cl = v > 0 ? 'positive' : 'negative';
+        return `<span class="shop-stat ${cl}">${k}: ${sign}${v}</span>`;
+      }).join('');
+      return `
+        <div class="shop-card rarity-${part.rarity}" style="--rarity-color: ${rarityDef.color}">
+          <header>
+            <h4>${part.name}</h4>
+            <span class="shop-rarity">${rarityDef.name}</span>
+          </header>
+          <p>${part.blurb}</p>
+          <div class="shop-stats">${statsHtml}</div>
+          <div class="shop-actions">
+            <span class="shop-price">${part.price} G</span>
+            <button type="button" class="shop-buy-btn" data-buy-part="${part.id}" ${owned || !canAfford ? 'disabled' : ''}>
+              ${owned ? 'Owned' : 'Buy'}
+            </button>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+  refreshQuickTips();
+}
+
+document.querySelector('.shop-tabs')?.addEventListener('click', e => {
+  if (e.target.dataset.shopTab) {
+    activeShopTab = e.target.dataset.shopTab;
+    renderShop();
+  }
+});
+
+document.getElementById('shopGrid')?.addEventListener('click', e => {
+  const buyBtn = e.target.closest('[data-buy-part]');
+  if (buyBtn) {
+    if (buyPremiumPart(buyBtn.dataset.buyPart)) {
+      refreshGarageCatalog();
+      renderGarageBuilder();
+      renderShop();
+    }
+  }
+  
+  const upgradeBtn = e.target.closest('[data-upgrade-stat]');
+  if (upgradeBtn) {
+    if (upgradeStat(upgradeBtn.dataset.upgradeStat)) {
+      renderGarageBuilder();
+      renderShop();
+    }
+  }
+});
+
+let shopOrigin = 'team';
+
+document.getElementById('openShopFromMenuButton')?.addEventListener('click', () => {
+  shopOrigin = 'team';
+  renderSetupStep('shop');
+  renderShop();
+});
+
+document.getElementById('openShopFromPauseButton')?.addEventListener('click', () => {
+  shopOrigin = 'pause';
+  ui.pauseMenu.classList.add('hidden');
+  ui.matchMenu.classList.remove('hidden');
+  renderSetupStep('shop');
+  renderShop();
+});
+
+document.getElementById('backFromShopButton')?.addEventListener('click', () => {
+  if (shopOrigin === 'pause') {
+    ui.matchMenu.classList.add('hidden');
+    ui.pauseMenu.classList.remove('hidden');
+  } else if (shopOrigin === 'main') {
+    openMainMenu();
+  } else {
+    renderSetupStep('team');
+  }
+  shopOrigin = 'team';
+});
+
+// Game Setup — Kill limit buttons
+document.querySelector('.kill-limit-options')?.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-kill-limit]');
+  if (!btn) return;
+  gameSetupKillLimit = Number(btn.dataset.killLimit);
+  document.querySelectorAll('[data-kill-limit]').forEach((b) => b.classList.toggle('selected', Number(b.dataset.killLimit) === gameSetupKillLimit));
+});
+
+document.querySelector('.team-kill-limit-options')?.addEventListener('click', (event) => {
+  const btn = event.target.closest('[data-team-kill-limit]');
+  if (!btn) return;
+  gameSetupTeamKillLimit = Number(btn.dataset.teamKillLimit);
+  document.querySelectorAll('[data-team-kill-limit]').forEach((b) => b.classList.toggle('selected', Number(b.dataset.teamKillLimit) === gameSetupTeamKillLimit));
 });
 
 function togglePauseMenu(show) {
@@ -708,10 +1540,12 @@ ui.resumeGameButton.addEventListener('click', () => togglePauseMenu(false));
 ui.settingsButton.addEventListener('click', () => {
   ui.pauseMenu.classList.add('hidden');
   ui.settingsMenu.classList.remove('hidden');
+  refreshQuickTips();
 });
 ui.closeSettingsButton.addEventListener('click', () => {
   ui.settingsMenu.classList.add('hidden');
   ui.pauseMenu.classList.remove('hidden');
+  refreshQuickTips();
 });
 ui.restartGameButton.addEventListener('click', () => {
   togglePauseMenu(false);
@@ -808,11 +1642,13 @@ ui.garageControls.addEventListener('click', (event) => {
   const materialButton = event.target.closest('[data-garage-material]');
   const textureButton = event.target.closest('[data-garage-part-texture]');
   const clearTextureButton = event.target.closest('[data-garage-clear-texture]');
+  let blueprintChanged = false;
   if (categoryButton) activeGarageCategory = categoryButton.dataset.garageCategory;
   if (partButton) {
     const category = garageCategories.find((item) => item.key === activeGarageCategory);
     garageBlueprint[category.field] = partButton.dataset.garagePart;
     garageFlash = { part: category.key, timer: 1.0 };
+    blueprintChanged = true;
     if (category.key === 'paintJob') {
       const paintJob = garagePartCatalog.paintJob.find((part) => part.id === partButton.dataset.garagePart);
       if (paintJob?.colors) {
@@ -825,7 +1661,10 @@ ui.garageControls.addEventListener('click', (event) => {
       }
     }
   }
-  if (materialButton) garageBlueprint.materialStyle = materialButton.dataset.garageMaterial;
+  if (materialButton) {
+    garageBlueprint.materialStyle = materialButton.dataset.garageMaterial;
+    blueprintChanged = true;
+  }
   if (textureButton) {
     const target = partPaintTargets[textureButton.dataset.garagePartTextureTarget];
     if (target) {
@@ -833,6 +1672,7 @@ ui.garageControls.addEventListener('click', (event) => {
       garageBlueprint[target.customDataKey] = '';
       garageBlueprint[target.customNameKey] = '';
       garageBlueprint[target.tintKey] = textureButton.dataset.garagePartTexture ? 0 : 100;
+      blueprintChanged = true;
     }
   }
   if (clearTextureButton) {
@@ -842,13 +1682,16 @@ ui.garageControls.addEventListener('click', (event) => {
       garageBlueprint[target.customDataKey] = '';
       garageBlueprint[target.customNameKey] = '';
       garageBlueprint[target.tintKey] = garageBlueprint[target.textureKey] ? 0 : 100;
+      blueprintChanged = true;
     } else {
       garageBlueprint.customTextureData = '';
       garageBlueprint.customTextureName = '';
       garageBlueprint.paintTint = 0;
+      blueprintChanged = true;
     }
   }
   if (categoryButton || partButton || materialButton || textureButton || clearTextureButton) {
+    if (blueprintChanged) markGarageBlueprintEdited();
     renderGarageBuilder();
     if (categoryButton) ui.garageControls.scrollTop = 0;
   }
@@ -866,12 +1709,16 @@ ui.garageControls.addEventListener('input', (event) => {
   }
   if (sliderKey) garageBlueprint[sliderKey] = Number(event.target.value);
   if (sliderKey) changed = true;
-  if (changed) renderGarageBuilder();
+  if (changed) {
+    markGarageBlueprintEdited();
+    renderGarageBuilder();
+  }
 });
-ui.garageControls.addEventListener('change', (event) => {
+ui.garageControls.addEventListener('change', async (event) => {
   const hexKey = event.target.dataset.garageColorHex;
   if (hexKey) {
     if (/^#[0-9a-f]{6}$/i.test(event.target.value)) garageBlueprint[hexKey] = event.target.value;
+    markGarageBlueprintEdited();
     renderGarageBuilder();
     return;
   }
@@ -879,22 +1726,27 @@ ui.garageControls.addEventListener('change', (event) => {
   const file = importInput?.files?.[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) return;
-  const reader = new FileReader();
-  reader.addEventListener('load', () => {
+  try {
+    const textureData = await compressImageFileForStorage(file);
     const target = partPaintTargets[importInput.dataset.garageTextureImport];
     if (target) {
-      garageBlueprint[target.customDataKey] = String(reader.result || '');
+      garageBlueprint[target.customDataKey] = textureData;
       garageBlueprint[target.customNameKey] = file.name;
       garageBlueprint[target.tintKey] = 0;
     } else {
-      garageBlueprint.customTextureData = String(reader.result || '');
+      garageBlueprint.customTextureData = textureData;
       garageBlueprint.customTextureName = file.name;
       garageBlueprint.paintTint = 0;
     }
+    markGarageBlueprintEdited();
     renderGarageBuilder();
-  });
-  reader.readAsDataURL(file);
+  } catch (error) {
+    alert(error.message || 'Could not import that texture image.');
+  }
 });
+
+refreshGarageCatalog();
+
 renderTeamBuilder();
 renderGarageBuilder();
 renderSetupStep('team');
@@ -910,7 +1762,7 @@ setupInput(ctx, {
     }
     if (code === 'Escape' && !ctx.match.ended) {
       if (!ctx.match.active) {
-        if (ui.matchMenu.classList.contains('hidden')) openMenu(true);
+        if (!ui.matchMenu.classList.contains('hidden')) openMainMenu();
       } else {
         if (ui.pauseMenu.classList.contains('hidden')) {
           togglePauseMenu(true);
@@ -984,6 +1836,13 @@ function animate() {
   routeRecorder.update(dt);
   effects.update(dt);
   updateGaragePreview(dt);
+  buildPreviewManager.update(dt);
+  quickTipTimer += dt;
+  if (quickTipTimer > 10 || (activeQuickTipId && !document.querySelector('.quick-tip-card'))) {
+    quickTipTimer = 0;
+    quickTipIndex += 1;
+    refreshQuickTips();
+  }
   physics.step();
   updateCamera(dt);
   updateHUD(ctx, ui, dt);

@@ -8,6 +8,112 @@
   <body>
     <main id="app">
       <canvas id="game"></canvas>
+      <button id="quickTipsToggle" class="quick-tips-toggle" type="button" aria-pressed="true">Quick Tips</button>
+      <div id="quickTipsLayer" class="quick-tips-layer" aria-live="polite"></div>
+      
+      <!-- MAIN MENU -->
+      <section id="mainMenuScreen" class="main-menu-screen active" aria-label="Main Menu">
+        <div class="main-menu-grid" aria-hidden="true"></div>
+        <div class="main-menu-circuit main-menu-circuit-a" aria-hidden="true"></div>
+        <div class="main-menu-circuit main-menu-circuit-b" aria-hidden="true"></div>
+        <div class="main-menu-orbit" aria-hidden="true">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+        <aside class="main-menu-hud main-menu-hud-left" aria-hidden="true">
+          <span>DRIVE CORE</span>
+          <b>SYNC 98.7</b>
+          <i></i>
+        </aside>
+        <aside class="main-menu-hud main-menu-hud-right" aria-hidden="true">
+          <span>THREAT GRID</span>
+          <b>ARMED</b>
+          <i></i>
+        </aside>
+        <div class="main-menu-content">
+          <div class="main-menu-brand">
+            <p class="main-menu-kicker">Neural ignition interface</p>
+            <h1 data-text="ETHER DRIVER"><span>ETHER</span> <span>DRIVER</span></h1>
+            <p>v1.0 // cyber combat chassis online</p>
+          </div>
+          <div class="main-menu-nav">
+            <button id="navCampaignButton" type="button" class="main-nav-btn disabled" aria-disabled="true">
+              <span class="nav-btn-index">00</span>
+              <span class="nav-btn-copy"><b>CAMPAIGN</b><small>WIP // locked simulation</small></span>
+              <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
+              <span class="nav-btn-gear"></span>
+              <span class="nav-btn-trail"></span>
+            </button>
+            <button id="navCustomMatchButton" type="button" class="main-nav-btn primary">
+              <span class="nav-btn-index">01</span>
+              <span class="nav-btn-copy"><b>CUSTOM MATCH</b><small>deploy arena protocol</small></span>
+              <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
+              <span class="nav-btn-gear"></span>
+              <span class="nav-btn-trail"></span>
+            </button>
+            <button id="navVehicleBuildsButton" type="button" class="main-nav-btn">
+              <span class="nav-btn-index">02</span>
+              <span class="nav-btn-copy"><b>VEHICLE BUILDS</b><small>tune chassis memory</small></span>
+              <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
+              <span class="nav-btn-gear"></span>
+              <span class="nav-btn-trail"></span>
+            </button>
+            <button id="navPremiumShopButton" type="button" class="main-nav-btn">
+              <span class="nav-btn-index">03</span>
+              <span class="nav-btn-copy"><b>PREMIUM SHOP</b><small>black market uplink</small></span>
+              <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
+              <span class="nav-btn-gear"></span>
+              <span class="nav-btn-trail"></span>
+            </button>
+            <button id="navAchievementsButton" type="button" class="main-nav-btn">
+              <span class="nav-btn-index">04</span>
+              <span class="nav-btn-copy"><b>LIFETIME ACHIEVEMENTS</b><small>combat record archive</small></span>
+              <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
+              <span class="nav-btn-gear"></span>
+              <span class="nav-btn-trail"></span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- LIFETIME ACHIEVEMENTS MODAL -->
+      <section id="achievementsModal" class="modal-overlay hidden" aria-label="Lifetime Achievements">
+        <div class="modal-panel">
+          <header class="modal-header">
+            <h2>Lifetime Achievements</h2>
+            <button id="closeAchievementsButton" class="close-btn">×</button>
+          </header>
+          <div class="modal-body">
+            <div id="achievementsGrid" class="achievements-grid">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+      
+      <!-- VEHICLE BUILDS MODAL -->
+      <section id="templatesModal" class="modal-overlay hidden builds-overlay" aria-label="Vehicle Builds">
+        <div class="modal-panel builds-panel">
+          <header class="modal-header">
+            <h2>Vehicle Builds</h2>
+            <button id="closeTemplatesButton" class="close-btn">×</button>
+          </header>
+          <div class="modal-body builds-body">
+            <section id="currentBuildPanel" class="current-build-panel" aria-label="Current Build">
+              <!-- Rendered via JS -->
+            </section>
+            <div class="template-actions">
+              <input type="text" id="templateNameInput" placeholder="Template Name" maxlength="24" />
+              <button id="saveTemplateButton" class="primary">Save Current Build</button>
+            </div>
+            <div id="templatesGrid" class="templates-grid">
+              <!-- Rendered via JS -->
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section id="hud" aria-label="Ether Driver instruments">
         <div class="brand">
           <span class="brand-mark"></span>
@@ -83,6 +189,7 @@
           </div>
         </div>
         <div id="worldLabels" class="world-labels"></div>
+        <div id="rewardPopups" class="reward-popups" aria-live="polite"></div>
       </section>
 
       <div id="killBanner" class="kill-banner" aria-live="assertive"></div>
@@ -108,7 +215,7 @@
           <span>Tab toggles</span>
         </header>
         <div class="scoreboard-grid scoreboard-head">
-          <span>Name</span><span>Team</span><span>K</span><span>D</span><span>HP</span><span>Weapons</span>
+          <span>Name</span><span>Team</span><span>K</span><span>D</span><span>DMG</span><span>HP</span><span>Weapons</span>
         </div>
         <div id="scoreboardBody"></div>
       </section>
@@ -120,7 +227,11 @@
                 <p class="menu-kicker">Ether Driver</p>
                 <h2>Team Mayhem Setup</h2>
               </div>
-              <button id="continueToGarageButton" type="button">Continue to Vehicle Editor</button>
+              <div class="menu-header-actions">
+                <button id="backToMainMenuFromSetupButton" type="button">Back to Main Menu</button>
+                <button id="openShopFromMenuButton" type="button" class="shop-btn">🛒 Shop & Upgrades</button>
+                <button id="continueToGarageButton" class="next-step-cta" type="button"><span>Continue to Vehicle Editor</span></button>
+              </div>
             </header>
             <div class="setup-grid">
               <label class="setup-field">
@@ -156,21 +267,100 @@
                 <p class="menu-kicker">Custom Garage</p>
                 <h3 id="garageTitle">Build Your Driver</h3>
                 </div>
-                <button id="startMatchButton" type="button">Start Match</button>
+                <div class="garage-header-actions">
+                  <button id="openBuildsFromGarageButton" type="button">Vehicle Builds</button>
+                  <button id="saveEditedBuildButton" type="button" class="build-save-btn" disabled>Save Changes</button>
+                  <button id="saveBuildVariantButton" type="button" class="build-save-btn">Save As New</button>
+                  <button id="continueToGameButton" class="next-step-cta" type="button"><span>Continue to Game Setup</span></button>
+                </div>
               </header>
               <div id="garagePreview" class="garage-preview"></div>
             </div>
             <div id="garageControls" class="garage-controls"></div>
             <div id="garageStats" class="garage-stats"></div>
           </section>
+          <section id="gameSetupStep" class="menu-step game-setup-step" aria-label="Game setup">
+            <header class="menu-step-header">
+              <div>
+                <p class="menu-kicker">Game Rules</p>
+                <h2>Game Setup</h2>
+              </div>
+              <div class="game-setup-header-actions">
+                <button id="backToGarageButton" type="button">Back</button>
+                <button id="startMatchButton" type="button" class="primary next-step-cta"><span>Start Match</span></button>
+              </div>
+            </header>
+            <div class="game-setup-grid">
+              <fieldset class="game-setup-field">
+                <legend>Kill Limit <small>(First player to reach X kills)</small></legend>
+                <div class="kill-limit-options" role="group" aria-label="Kill limit">
+                  <button type="button" data-kill-limit="0" class="selected">None</button>
+                  <button type="button" data-kill-limit="5">5</button>
+                  <button type="button" data-kill-limit="10">10</button>
+                  <button type="button" data-kill-limit="15">15</button>
+                  <button type="button" data-kill-limit="20">20</button>
+                  <button type="button" data-kill-limit="25">25</button>
+                  <button type="button" data-kill-limit="50">50</button>
+                </div>
+              </fieldset>
+              <fieldset class="game-setup-field">
+                <legend>Team Kill Limit <small>(First team to reach X total kills)</small></legend>
+                <div class="team-kill-limit-options" role="group" aria-label="Team kill limit">
+                  <button type="button" data-team-kill-limit="0" class="selected">None</button>
+                  <button type="button" data-team-kill-limit="10">10</button>
+                  <button type="button" data-team-kill-limit="20">20</button>
+                  <button type="button" data-team-kill-limit="30">30</button>
+                  <button type="button" data-team-kill-limit="50">50</button>
+                  <button type="button" data-team-kill-limit="75">75</button>
+                  <button type="button" data-team-kill-limit="100">100</button>
+                </div>
+              </fieldset>
+            </div>
+          </section>
+          
+          <section id="shopMenuStep" class="menu-step shop-menu-step" aria-label="Premium Shop">
+            <header class="menu-step-header">
+              <button id="backFromShopButton" type="button">Back</button>
+              <div>
+                <p class="menu-kicker">Black Market</p>
+                <h2>Premium Parts Shop</h2>
+              </div>
+              <div id="shopStatsHeader" class="shop-stats-header"></div>
+            </header>
+            <div class="shop-tabs">
+              <button type="button" class="selected" data-shop-tab="upgrades">Upgrades</button>
+              <button type="button" data-shop-tab="chassis">Chassis</button>
+              <button type="button" data-shop-tab="cabin">Cabin</button>
+              <button type="button" data-shop-tab="wheel">Wheels</button>
+              <button type="button" data-shop-tab="turret">Turret</button>
+              <button type="button" data-shop-tab="armor">Armor</button>
+              <button type="button" data-shop-tab="paintJob">Paint</button>
+            </div>
+            <div id="shopGrid" class="shop-grid"></div>
+          </section>
         </div>
       </section>
       <section id="resultsOverlay" class="results-overlay" aria-label="Match results">
         <div class="results-panel">
+          <div id="mvpPedestal" class="mvp-pedestal">
+            <div class="mvp-portrait-wrap">
+              <canvas id="mvpPortrait" class="mvp-portrait" width="220" height="220"></canvas>
+            </div>
+            <div class="mvp-crown">★ MVP ★</div>
+            <div id="mvpName" class="mvp-name">MVP</div>
+            <div id="mvpTeam" class="mvp-team">Team</div>
+            <div id="mvpStats" class="mvp-stats"></div>
+          </div>
           <p class="menu-kicker">Match Complete</p>
           <h2 id="resultsTitle">Winner</h2>
-          <div id="resultsBody"></div>
-          <button id="restartMatchButton" type="button">New Match</button>
+          <div id="resultsRewards" class="results-rewards"></div>
+          <div id="resultsBody" class="results-body"></div>
+          <button id="moreDetailsButton" type="button" class="more-details-btn">▼ More Details</button>
+          <div id="detailedResults" class="detailed-results"></div>
+          <div class="results-actions" aria-label="Match end actions">
+            <button id="restartMatchButton" type="button" class="primary">New Match</button>
+            <button id="resultsMainMenuButton" type="button">Back to Main Menu</button>
+          </div>
         </div>
       </section>
 
@@ -184,6 +374,7 @@
           </header>
           <div class="pause-actions">
             <button id="resumeGameButton" type="button" class="primary">Resume Game</button>
+            <button id="openShopFromPauseButton" type="button" class="shop-btn">🛒 Shop & Upgrades</button>
             <button id="settingsButton" type="button">Settings</button>
             <button id="restartGameButton" type="button">Restart Match</button>
             <button id="mainMenuButton" type="button" class="danger">Main Menu</button>
@@ -200,7 +391,13 @@
             </div>
           </header>
           <div class="settings-content">
-            <p>Settings coming soon...</p>
+            <label class="settings-toggle-row">
+              <span>
+                <strong>Quick Tips</strong>
+                <small>Show spotlight hints for builds, rewards, setup, and progression.</small>
+              </span>
+              <input id="quickTipsSettingsToggle" type="checkbox" checked />
+            </label>
           </div>
           <div class="pause-actions">
             <button id="closeSettingsButton" type="button" class="primary">Back to Pause Menu</button>

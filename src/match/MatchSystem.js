@@ -5,7 +5,8 @@ import { vehicleCatalog } from '../data/vehicleCatalog.js';
 import { applyVehicleTeamVisuals, createVehicleEntity } from '../vehicles/VehicleFactory.js';
 import { attachAI } from '../ai/AISystem.js';
 import { clearTeamBases, createTeamBases, findBaseForTeam } from '../world/BaseSystem.js';
-import { garagePartCatalog } from '../data/vehicleParts.js';
+import { garagePartCatalog, recordGarageTemplateMatchStats } from '../data/vehicleParts.js';
+import { grantMatchReward, addExp, addGold, recordLifetimeStats, loadProgression } from '../core/ProgressionSystem.js';
 
 const vehicleIds = ['ether-runner', 'pulse-wasp', 'iron-jackal'];
 
@@ -72,10 +73,20 @@ export function createDefaultMatchState() {
     enabledWeapons: new Set(['boom-missile', 'bouncy-wouncy', 'shock-lance', 'fire-mine']),
     bases: [],
     scoreboardOpen: false,
-    noEnd: true,
+    noEnd: false,
+    killLimit: 0,
+    teamKillLimit: 0,
     killFeed: [],
+    killLog: [],
     killBannerQueue: [],
     nextName: 0,
+    playerRewards: {
+      turretHits: { exp: 0, gold: 0 },
+      weaponHits: { exp: 0, gold: 0 },
+      kills: { exp: 0, gold: 0 },
+      match: { exp: 0, gold: 0 },
+      total: { exp: 0, gold: 0 },
+    },
   };
 }
 
@@ -85,7 +96,7 @@ export function setupScore(entity, displayName, team) {
   entity.team = team.id;
   entity.teamName = team.name;
   entity.teamColor = team.color;
-  entity.score = { kills: 0, deaths: 0, damageDealt: 0 };
+  entity.score = { kills: 0, deaths: 0, damageDealt: 0, weaponDamage: {}, weaponsPickedUp: 0, specialFloorUses: { turbo: 0, jump: 0 } };
   applyVehicleTeamVisuals(entity, team, displayName);
 }
 
@@ -112,15 +123,25 @@ export function startMatch(ctx, materials, options, physics) {
   ctx.match.paused = false;
   ctx.match.winner = null;
   ctx.match.killFeed = [];
+  ctx.match.killLog = [];
   ctx.match.killBannerQueue = [];
   ctx.match.teamCount = teams.length;
   ctx.match.teams = teams;
-  ctx.match.noEnd = true;
+  ctx.match.noEnd = !(options.killLimit > 0 || options.teamKillLimit > 0);
+  ctx.match.killLimit = options.killLimit || 0;
+  ctx.match.teamKillLimit = options.teamKillLimit || 0;
   ctx.match.scoreboardOpen = false;
   ctx.match.playerTeamId = playerTeamId;
   ctx.match.playerName = options.playerName || 'Player';
   ctx.match.enabledWeapons = new Set(options.enabledWeapons);
   ctx.match.nextName = 0;
+  ctx.match.playerRewards = {
+    turretHits: { exp: 0, gold: 0 },
+    weaponHits: { exp: 0, gold: 0 },
+    kills: { exp: 0, gold: 0 },
+    match: { exp: 0, gold: 0 },
+    total: { exp: 0, gold: 0 },
+  };
 
   let aiIndex = 0;
   createTeamBases(ctx, materials, teams);
@@ -204,13 +225,87 @@ export function updateMatch(ctx, dt) {
     item.time -= dt;
   });
   ctx.match.killFeed = ctx.match.killFeed.filter((item) => item.time > 0);
-  if (ctx.match.noEnd) return;
-  const vehicles = ctx.ecs.entities.filter((e) => e.vehicle);
-  const aliveTeams = ctx.match.teams.filter((team) => vehicles.some((e) => e.teamId === team.id && !e.health.dead));
-  if (aliveTeams.length <= 1) {
-    ctx.match.ended = true;
-    ctx.match.active = false;
-    ctx.match.winner = aliveTeams[0]?.name || 'NO TEAM';
+
+  const wasActive = ctx.match.active;
+
+  // Kill limit — individual player
+  if (ctx.match.killLimit > 0) {
+    const vehicles = ctx.ecs.entities.filter((e) => e.vehicle);
+    for (const v of vehicles) {
+      if ((v.score?.kills || 0) >= ctx.match.killLimit) {
+        ctx.match.ended = true;
+        ctx.match.active = false;
+        ctx.match.winner = v.teamName || 'Unknown';
+        ctx.match.mvpName = v.displayName;
+        break;
+      }
+    }
+  }
+
+  // Team kill limit
+  if (!ctx.match.ended && ctx.match.teamKillLimit > 0) {
+    const vehicles = ctx.ecs.entities.filter((e) => e.vehicle);
+    for (const team of ctx.match.teams) {
+      const teamKills = vehicles.filter((v) => v.teamId === team.id).reduce((sum, v) => sum + (v.score?.kills || 0), 0);
+      if (teamKills >= ctx.match.teamKillLimit) {
+        ctx.match.ended = true;
+        ctx.match.active = false;
+        ctx.match.winner = team.name || 'Unknown';
+        break;
+      }
+    }
+  }
+
+  if (!ctx.match.ended && !ctx.match.noEnd) {
+    const vehicles = ctx.ecs.entities.filter((e) => e.vehicle);
+    const aliveTeams = ctx.match.teams.filter((team) => vehicles.some((e) => e.teamId === team.id && !e.health.dead));
+    if (aliveTeams.length <= 1) {
+      ctx.match.ended = true;
+      ctx.match.active = false;
+      ctx.match.winner = aliveTeams[0]?.name || 'NO TEAM';
+    }
+  }
+
+  if (wasActive && ctx.match.ended) {
+    const playerTeam = ctx.match.teams.find(t => t.id === ctx.match.playerTeamId);
+    const playerWon = playerTeam && ctx.match.winner === playerTeam.name;
+    const matchBaseReward = grantMatchReward(playerWon);
+    
+    // Accumulate total match rewards
+    const pr = ctx.match.playerRewards;
+    pr.match.exp = matchBaseReward.expGain;
+    pr.match.gold = matchBaseReward.goldGain;
+    
+    // Add all hit/kill rewards to progression now
+    const extraExp = pr.turretHits.exp + pr.weaponHits.exp + pr.kills.exp;
+    const extraGold = pr.turretHits.gold + pr.weaponHits.gold + pr.kills.gold;
+    
+    const state = loadProgression();
+    addExp(state, extraExp);
+    addGold(state, extraGold);
+    
+    pr.total.exp = pr.match.exp + extraExp;
+    pr.total.gold = pr.match.gold + extraGold;
+    
+    // Track stats
+    if (ctx.player) {
+      recordLifetimeStats({
+        damageDealt: ctx.player.score?.damageDealt || 0,
+        kills: ctx.player.score?.kills || 0,
+        deaths: ctx.player.score?.deaths || 0,
+      });
+      recordGarageTemplateMatchStats({
+        kills: ctx.player.score?.kills || 0,
+        deaths: ctx.player.score?.deaths || 0,
+        damage: ctx.player.score?.damageDealt || 0,
+        won: playerWon,
+        pickups: ctx.player.score?.weaponsPickedUp || 0,
+        turbo: ctx.player.score?.specialFloorUses?.turbo || 0,
+        jump: ctx.player.score?.specialFloorUses?.jump || 0,
+      });
+    }
+
+    ctx.match.reward = pr.total;
   }
 }
 

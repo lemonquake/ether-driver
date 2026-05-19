@@ -57,7 +57,24 @@ export function updateVehicles(ctx, dt, effects) {
     const nextX = transform.x + forward.x * velocity.speed * dt;
     const nextZ = transform.z + forward.z * velocity.speed * dt;
     const carObb = makeObb(nextX, nextZ, stats.carHalfWidth * 2, stats.carHalfLength * 2, transform.yaw);
-    const collision = findObbCollision(carObb, ctx.collisionShapes);
+    
+    // Filter collision shapes based on vehicle height
+    const carY = transform.y || 0;
+    const filteredShapes = ctx.collisionShapes.filter((shape) => {
+      let obstacleHeight = 0;
+      if (shape.type === 'wall' || shape.type === 'building') {
+        obstacleHeight = 35; // Tall obstacles/boundaries
+      } else if (shape.type === 'barrier') {
+        obstacleHeight = 0.6;
+      } else if (shape.type === 'crate') {
+        obstacleHeight = 1.8;
+      } else if (shape.type === 'parked-car') {
+        obstacleHeight = 1.3;
+      }
+      return carY < obstacleHeight;
+    });
+    
+    const collision = findObbCollision(carObb, filteredShapes);
     velocity.collisionCooldown = Math.max(0, velocity.collisionCooldown - dt);
     for (const [id, time] of velocity.vehicleCollisionCooldowns) {
       const next = time - dt;
@@ -106,16 +123,27 @@ export function updateVehicles(ctx, dt, effects) {
             transform.yaw = tile.yaw;
             velocity.steer = 0;
             if (Math.random() < 0.2) effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 3);
+            if (entity.score && !entity._lastTurboTile) {
+              if (!entity.score.specialFloorUses) entity.score.specialFloorUses = { turbo: 0, jump: 0 };
+              entity.score.specialFloorUses.turbo += 1;
+            }
+            entity._lastTurboTile = 0.5;
           } else if (tile.type === 'jump') {
             if (velocity.y <= 0) {
               velocity.y = 35;
               effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 15);
               ctx.cameraEffects?.add(0.1);
+              if (entity.score) {
+                if (!entity.score.specialFloorUses) entity.score.specialFloorUses = { turbo: 0, jump: 0 };
+                entity.score.specialFloorUses.jump += 1;
+              }
             }
           }
         }
       }
     }
+    if (entity._lastTurboTile > 0) entity._lastTurboTile -= dt;
+    else entity._lastTurboTile = 0;
 
     velocity.wheelSpin += velocity.speed * dt * 2.7;
     velocity.smokeTimer -= dt;
@@ -144,6 +172,13 @@ function resolveVehicleCollisions(ctx, vehicles, effects) {
     for (let j = i + 1; j < vehicles.length; j += 1) {
       const a = vehicles[i];
       const b = vehicles[j];
+      
+      // Vertical height overlap check
+      const ay = a.transform.y || 0;
+      const by = b.transform.y || 0;
+      const vehicleHeight = 1.5;
+      if (Math.abs(ay - by) > vehicleHeight) continue;
+
       const hit = testObbOverlap(vehicleObb(a), vehicleObb(b));
       if (!hit) continue;
       const statsA = getVehicleStats(a);

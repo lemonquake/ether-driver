@@ -1,6 +1,12 @@
 import { baseVehicleStats } from './vehicleCatalog.js';
+import { loadProgression } from '../core/ProgressionSystem.js';
+import { premiumPartDefinitions } from './premiumParts.js';
 
 export const GARAGE_STORAGE_KEY = 'ether-driver.garage.v2';
+export const GARAGE_BUILD_LIMIT = 10;
+const GARAGE_TEMPLATES_KEY = `${GARAGE_STORAGE_KEY}.templates`;
+const GARAGE_ACTIVE_BUILD_KEY = `${GARAGE_STORAGE_KEY}.activeBuildId`;
+const MAX_STORED_IMAGE_DATA_LENGTH = 650000;
 
 export const defaultGarageBlueprint = {
   chassisId: 'razorback',
@@ -175,6 +181,40 @@ export const garagePartCatalog = {
 };
 
 const partGroups = Object.keys(garagePartCatalog);
+
+export function refreshGarageCatalog() {
+  const progression = loadProgression();
+  
+  Object.keys(garagePartCatalog).forEach(key => {
+    garagePartCatalog[key] = garagePartCatalog[key].filter(p => !p.isPremium);
+  });
+  
+  progression.inventory.forEach(partId => {
+    const def = premiumPartDefinitions.find(p => p.id === partId);
+    if (!def) return;
+    
+    const basePart = garagePartCatalog[def.type].find(p => p.id === def.baseStyle);
+    if (!basePart) return;
+    
+    const premiumPart = {
+      ...basePart,
+      id: def.id,
+      name: `★ ${def.name}`,
+      blurb: def.blurb,
+      stats: { ...def.stats },
+      isPremium: true,
+      rarity: def.rarity,
+    };
+    
+    if (def.type === 'paintJob') {
+      premiumPart.colors = def.colors;
+      premiumPart.texture = def.texture;
+    }
+    
+    garagePartCatalog[def.type].push(premiumPart);
+  });
+}
+
 export const garageMaterialStyles = [
   { id: 'metal', name: 'Metal', blurb: 'Glossy automotive metal with clear coat.' },
   { id: 'matte', name: 'Non-shiny', blurb: 'Flat paint with soft, tactical reflections.' },
@@ -208,7 +248,19 @@ function sanitizeTextureId(value) {
 }
 
 function sanitizeImageData(value) {
-  return typeof value === 'string' && value.startsWith('data:image/') ? value : '';
+  return typeof value === 'string' && value.startsWith('data:image/') && value.length <= MAX_STORED_IMAGE_DATA_LENGTH ? value : '';
+}
+
+function stripStoredImages(blueprint) {
+  return {
+    ...blueprint,
+    customTextureData: '',
+    customTextureName: '',
+    wheelCustomTextureData: '',
+    wheelCustomTextureName: '',
+    turretCustomTextureData: '',
+    turretCustomTextureName: '',
+  };
 }
 
 export function sanitizeGarageBlueprint(value = {}) {
@@ -255,7 +307,191 @@ export function loadGarageBlueprint() {
 }
 
 export function saveGarageBlueprint(blueprint) {
-  localStorage.setItem(GARAGE_STORAGE_KEY, JSON.stringify(sanitizeGarageBlueprint(blueprint)));
+  const clean = sanitizeGarageBlueprint(blueprint);
+  try {
+    localStorage.setItem(GARAGE_STORAGE_KEY, JSON.stringify(clean));
+    return clean;
+  } catch (error) {
+    if (error?.name !== 'QuotaExceededError') throw error;
+    const compact = sanitizeGarageBlueprint(stripStoredImages(clean));
+    localStorage.setItem(GARAGE_STORAGE_KEY, JSON.stringify(compact));
+    return compact;
+  }
+}
+
+export function createGarageBuildStats() {
+  return {
+    uses: 0,
+    kills: 0,
+    deaths: 0,
+    damage: 0,
+    wins: 0,
+    pickups: 0,
+    turbo: 0,
+    jump: 0,
+  };
+}
+
+function generateGarageBuildId() {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID();
+  return `build-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function cleanBuildStats(stats = {}) {
+  const defaults = createGarageBuildStats();
+  return Object.fromEntries(Object.keys(defaults).map((key) => {
+    const value = Number(stats[key]);
+    return [key, Number.isFinite(value) ? Math.max(0, Math.round(value)) : defaults[key]];
+  }));
+}
+
+function normalizeGarageTemplate(template = {}, index = 0) {
+  const now = new Date().toISOString();
+  const rawBlueprint = template.blueprint || template;
+  const rawName = typeof template.name === 'string' ? template.name.trim() : '';
+  return {
+    id: typeof template.id === 'string' && template.id ? template.id : generateGarageBuildId(),
+    name: (rawName || `Build ${index + 1}`).slice(0, 24),
+    blueprint: sanitizeGarageBlueprint(rawBlueprint),
+    stats: cleanBuildStats(template.stats),
+    createdAt: typeof template.createdAt === 'string' ? template.createdAt : now,
+    updatedAt: typeof template.updatedAt === 'string' ? template.updatedAt : (typeof template.createdAt === 'string' ? template.createdAt : now),
+  };
+}
+
+export function loadGarageTemplates() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(GARAGE_TEMPLATES_KEY));
+    if (!Array.isArray(parsed)) return [];
+    const normalized = parsed.slice(0, GARAGE_BUILD_LIMIT).map((template, index) => normalizeGarageTemplate(template, index));
+    localStorage.setItem(GARAGE_TEMPLATES_KEY, JSON.stringify(normalized));
+    return normalized;
+  } catch {
+    return [];
+  }
+}
+
+export function saveGarageTemplates(templates) {
+  const normalized = (Array.isArray(templates) ? templates : [])
+    .slice(0, GARAGE_BUILD_LIMIT)
+    .map((template, index) => normalizeGarageTemplate(template, index));
+  try {
+    localStorage.setItem(GARAGE_TEMPLATES_KEY, JSON.stringify(normalized));
+    return normalized;
+  } catch (error) {
+    if (error?.name !== 'QuotaExceededError') throw error;
+    const compact = normalized.map((template, index) => normalizeGarageTemplate({
+      ...template,
+      blueprint: stripStoredImages(template.blueprint),
+    }, index));
+    localStorage.setItem(GARAGE_TEMPLATES_KEY, JSON.stringify(compact));
+    return compact;
+  }
+}
+
+export function createGarageTemplate(name, blueprint) {
+  const templates = loadGarageTemplates();
+  if (templates.length >= GARAGE_BUILD_LIMIT) return null;
+  const now = new Date().toISOString();
+  const template = normalizeGarageTemplate({
+    id: generateGarageBuildId(),
+    name,
+    blueprint,
+    stats: createGarageBuildStats(),
+    createdAt: now,
+    updatedAt: now,
+  }, templates.length);
+  saveGarageTemplates([...templates, template]);
+  return template;
+}
+
+export function updateGarageTemplate(buildId, updates = {}) {
+  if (!buildId) return null;
+  const templates = loadGarageTemplates();
+  const index = templates.findIndex((template) => template.id === buildId);
+  if (index < 0) return null;
+
+  const current = templates[index];
+  const next = normalizeGarageTemplate({
+    ...current,
+    ...(typeof updates.name === 'string' ? { name: updates.name } : {}),
+    ...(updates.blueprint ? { blueprint: updates.blueprint } : {}),
+    stats: current.stats,
+    createdAt: current.createdAt,
+    updatedAt: new Date().toISOString(),
+  }, index);
+
+  templates[index] = next;
+  saveGarageTemplates(templates);
+  return next;
+}
+
+export function renameGarageTemplate(buildId, name) {
+  return updateGarageTemplate(buildId, { name });
+}
+
+export function deleteGarageTemplate(buildId) {
+  const templates = loadGarageTemplates();
+  const next = templates.filter((template) => template.id !== buildId);
+  if (next.length === templates.length) return false;
+  saveGarageTemplates(next);
+  if (getActiveGarageTemplateId() === buildId) clearActiveGarageTemplateId();
+  return true;
+}
+
+export function getActiveGarageTemplateId() {
+  try {
+    return localStorage.getItem(GARAGE_ACTIVE_BUILD_KEY) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function setActiveGarageTemplateId(buildId) {
+  if (!buildId) return clearActiveGarageTemplateId();
+  localStorage.setItem(GARAGE_ACTIVE_BUILD_KEY, buildId);
+}
+
+export function clearActiveGarageTemplateId() {
+  localStorage.removeItem(GARAGE_ACTIVE_BUILD_KEY);
+}
+
+function updateGarageTemplateStats(buildId, readNextStats) {
+  if (!buildId) return false;
+  const templates = loadGarageTemplates();
+  const index = templates.findIndex((template) => template.id === buildId);
+  if (index < 0) {
+    if (getActiveGarageTemplateId() === buildId) clearActiveGarageTemplateId();
+    return false;
+  }
+  const template = templates[index];
+  templates[index] = {
+    ...template,
+    stats: cleanBuildStats(readNextStats(template.stats || createGarageBuildStats())),
+    updatedAt: new Date().toISOString(),
+  };
+  saveGarageTemplates(templates);
+  return true;
+}
+
+export function recordGarageTemplateUse(buildId = getActiveGarageTemplateId()) {
+  return updateGarageTemplateStats(buildId, (stats) => ({
+    ...stats,
+    uses: (stats.uses || 0) + 1,
+  }));
+}
+
+export function recordGarageTemplateMatchStats(matchStats = {}, buildId = getActiveGarageTemplateId()) {
+  return updateGarageTemplateStats(buildId, (stats) => ({
+    ...stats,
+    kills: (stats.kills || 0) + (matchStats.kills || 0),
+    deaths: (stats.deaths || 0) + (matchStats.deaths || 0),
+    damage: (stats.damage || 0) + Math.round(matchStats.damage || 0),
+    wins: (stats.wins || 0) + (matchStats.won ? 1 : 0),
+    pickups: (stats.pickups || 0) + (matchStats.pickups || 0),
+    turbo: (stats.turbo || 0) + (matchStats.turbo || 0),
+    jump: (stats.jump || 0) + (matchStats.jump || 0),
+  }));
 }
 
 export function getGaragePart(group, id) {
@@ -279,6 +515,16 @@ export function buildGarageVehicleDefinition(blueprint) {
   const parts = getGarageSelection(clean);
   const stats = { ...baseVehicleStats };
   partGroups.forEach((group) => addStats(stats, parts[group].stats));
+  
+  const progression = loadProgression();
+  if (progression && progression.upgrades) {
+    stats.acceleration += progression.upgrades.acceleration * 0.2;
+    stats.maxForwardSpeed += progression.upgrades.acceleration * 0.1;
+    stats.steerRate += progression.upgrades.handling * 0.05;
+    stats.turretMagazineSize += progression.upgrades.maxAmmo;
+    stats.turretReloadTime -= progression.upgrades.firingRate * 0.02;
+  }
+  
   stats.rideHeight = parts.chassis.rideHeight;
   stats.carHalfWidth = parts.chassis.dimensions.width * 0.5;
   stats.carHalfLength = parts.chassis.dimensions.length * 0.5;

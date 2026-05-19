@@ -1,8 +1,8 @@
 export const defaultTeams = [
-  { id: 'team-1', name: 'Aurora', color: '#82ffcf', flagLabel: 'A', playerCount: 3 },
-  { id: 'team-2', name: 'Crimson', color: '#ff5f7d', flagLabel: 'C', playerCount: 3 },
-  { id: 'team-3', name: 'Volt', color: '#ffcc66', flagLabel: 'V', playerCount: 3 },
-  { id: 'team-4', name: 'Phantom', color: '#b991ff', flagLabel: 'P', playerCount: 3 },
+  { id: 'team-1', name: 'Ion', color: '#00a7ff', flagLabel: 'I', playerCount: 3 },
+  { id: 'team-2', name: 'Neon', color: '#ff2bd6', flagLabel: 'N', playerCount: 3 },
+  { id: 'team-3', name: 'Volt', color: '#ffe600', flagLabel: 'V', playerCount: 3 },
+  { id: 'team-4', name: 'Void', color: '#7c3cff', flagLabel: 'V', playerCount: 3 },
 ];
 
 export function cloneDefaultTeams(count = 2) {

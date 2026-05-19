@@ -55,8 +55,10 @@ export function createHUD(ctx) {
     startMatchButton: document.querySelector('#startMatchButton'),
     resultsOverlay: document.querySelector('#resultsOverlay'),
     resultsTitle: document.querySelector('#resultsTitle'),
+    resultsRewards: document.querySelector('#resultsRewards'),
     resultsBody: document.querySelector('#resultsBody'),
     restartMatchButton: document.querySelector('#restartMatchButton'),
+    resultsMainMenuButton: document.querySelector('#resultsMainMenuButton'),
     pauseMenu: document.querySelector('#pauseMenu'),
     resumeGameButton: document.querySelector('#resumeGameButton'),
     settingsButton: document.querySelector('#settingsButton'),
@@ -64,6 +66,24 @@ export function createHUD(ctx) {
     mainMenuButton: document.querySelector('#mainMenuButton'),
     settingsMenu: document.querySelector('#settingsMenu'),
     closeSettingsButton: document.querySelector('#closeSettingsButton'),
+    gameSetupStep: document.querySelector('#gameSetupStep'),
+    continueToGameButton: document.querySelector('#continueToGameButton'),
+    backToGarageButton: document.querySelector('#backToGarageButton'),
+    mvpPedestal: document.querySelector('#mvpPedestal'),
+    mvpName: document.querySelector('#mvpName'),
+    mvpTeam: document.querySelector('#mvpTeam'),
+    mvpStats: document.querySelector('#mvpStats'),
+    mvpPortrait: document.querySelector('#mvpPortrait'),
+    moreDetailsButton: document.querySelector('#moreDetailsButton'),
+    detailedResults: document.querySelector('#detailedResults'),
+    rewardPopups: document.querySelector('#rewardPopups'),
+    showRewardPopup: (text) => {
+      const el = document.createElement('div');
+      el.className = 'reward-popup';
+      el.textContent = text;
+      ui.rewardPopups?.appendChild(el);
+      setTimeout(() => el.remove(), 1500);
+    },
   };
   if (ui.worldLabels) {
     ui.worldLabels.textContent = '';
@@ -98,6 +118,7 @@ function renderScoreRows(rows) {
       <span style="color:${esc(row.teamColor)}">${esc(row.team)}</span>
       <span>${row.kills}</span>
       <span>${row.deaths}</span>
+      <span>${row.damage}</span>
       <span>${row.respawn ? `RESP ${row.respawn}` : row.health}</span>
       <span>${esc(row.turretAmmo)} | ${esc(row.q)} / ${esc(row.e)}</span>
     </div>
@@ -141,12 +162,279 @@ export function updateMatchUI(ctx, ui) {
     if (ui.resultsOverlay) {
       const visible = Boolean(ctx.match?.ended);
       ui.resultsOverlay.classList.toggle('visible', visible);
-      if (visible) {
+      if (visible && !ui._resultsRendered) {
+        ui._resultsRendered = true;
         ui.resultsTitle.textContent = `${ctx.match.winner} WINS`;
-        ui.resultsBody.innerHTML = renderScoreRows(rows);
+        renderPostMatchLeaderboard(ctx, ui, rows);
       }
     }
+    if (!ctx.match?.ended) ui._resultsRendered = false;
   }
+}
+
+// ── Post-Match Leaderboard ───────────────────────────────────
+function calculateMVP(rows) {
+  let best = null;
+  let bestScore = -Infinity;
+  for (const row of rows) {
+    const score = (row.kills * 3) + (row.damage * 0.1) - (row.deaths * 1);
+    if (score > bestScore) {
+      bestScore = score;
+      best = row;
+    }
+  }
+  return best;
+}
+
+function renderWeaponDamageChips(weaponDamage) {
+  if (!weaponDamage || Object.keys(weaponDamage).length === 0) return '<span class="no-data">—</span>';
+  return Object.entries(weaponDamage)
+    .sort((a, b) => b[1] - a[1])
+    .map(([weaponId, dmg]) => {
+      const weapon = weaponCatalog[weaponId];
+      const name = weapon?.name || weaponId;
+      const color = weapon ? `#${weapon.color.toString(16).padStart(6, '0')}` : '#888';
+      return `<span class="weapon-chip" style="--chip-color:${color}"><b>${esc(name)}</b><em>${Math.round(dmg)}</em></span>`;
+    }).join('');
+}
+
+function renderPostMatchLeaderboard(ctx, ui, rows) {
+  const mvp = calculateMVP(rows);
+  
+  // MVP Pedestal
+  if (ui.mvpPedestal && mvp) {
+    ui.mvpPedestal.style.setProperty('--team-color', mvp.teamColor || '#82ffcf');
+    ui.mvpName.textContent = mvp.name;
+    ui.mvpTeam.textContent = mvp.team;
+    ui.mvpTeam.style.color = mvp.teamColor;
+    ui.mvpStats.innerHTML = `
+      <span><b>${mvp.kills}</b> Kills</span>
+      <span><b>${mvp.deaths}</b> Deaths</span>
+      <span><b>${mvp.damage}</b> Damage</span>
+      <span><b>${(mvp.deaths > 0 ? (mvp.kills / mvp.deaths).toFixed(1) : mvp.kills.toFixed(1))}</b> K/D</span>
+    `;
+
+    // Render spinning MVP vehicle portrait
+    renderMVPPortrait(ctx, mvp, ui.mvpPortrait);
+  }
+
+  // Rewards Breakdown
+  if (ui.resultsRewards && ctx.match?.playerRewards) {
+    const pr = ctx.match.playerRewards;
+    ui.resultsRewards.innerHTML = `
+      <div class="rewards-breakdown">
+        <h3>Match Rewards</h3>
+        <div class="reward-row"><span>Match Completion</span> <strong>+${pr.match.exp} EXP</strong> <strong>+${pr.match.gold} Gold</strong></div>
+        <div class="reward-row"><span>Kills</span> <strong>+${pr.kills.exp} EXP</strong> <strong>+${pr.kills.gold} Gold</strong></div>
+        <div class="reward-row"><span>Turret Hits</span> <strong>+${pr.turretHits.exp} EXP</strong> <strong>+${pr.turretHits.gold} Gold</strong></div>
+        <div class="reward-row"><span>Weapon Hits</span> <strong>+${pr.weaponHits.exp} EXP</strong> <strong>+${pr.weaponHits.gold} Gold</strong></div>
+        <div class="reward-row total"><span>Total Gained</span> <strong>+${pr.total.exp} EXP</strong> <strong>+${pr.total.gold} Gold</strong></div>
+      </div>
+    `;
+  }
+
+  // Full entity data from ECS
+  const entities = ctx.ecs.entities.filter((e) => e.vehicle);
+  const teams = (ctx.match?.teams || [])
+    .map((team) => {
+      const teamEntities = entities.filter((e) => e.teamId === team.id);
+      const teamRows = rows.filter((r) => r.teamId === team.id);
+      const kills = teamRows.reduce((s, r) => s + r.kills, 0);
+      const damage = teamRows.reduce((s, r) => s + r.damage, 0);
+      return { ...team, teamEntities, teamRows, kills, damage };
+    })
+    .sort((a, b) => b.kills - a.kills || b.damage - a.damage);
+
+  const leaderboardHTML = teams.map((team) => `
+    <section class="results-team" style="--team-color:${esc(team.color)}">
+      <header class="results-team-header">
+        <strong>${esc(team.name)}</strong>
+        <span>${team.kills} KILLS · ${team.damage} DMG</span>
+      </header>
+      <div class="results-table">
+        <div class="results-table-head">
+          <span>Player</span><span>K</span><span>D</span><span>K/D</span><span>DMG</span><span>Pickups</span><span>Turbo</span><span>Jump</span>
+        </div>
+        ${team.teamEntities.map((entity) => {
+          const s = entity.score || {};
+          const kd = s.deaths > 0 ? (s.kills / s.deaths).toFixed(1) : s.kills.toFixed(1);
+          const pickups = s.weaponsPickedUp || 0;
+          const turbo = s.specialFloorUses?.turbo || 0;
+          const jump = s.specialFloorUses?.jump || 0;
+          const isMvp = mvp && entity.displayName === mvp.name && entity.teamId === mvp.teamId;
+          return `
+            <div class="results-table-row ${isMvp ? 'is-mvp' : ''}">
+              <span class="results-player-name">${isMvp ? '★ ' : ''}${esc(entity.displayName || entity.vehicle.name)}</span>
+              <span>${s.kills || 0}</span>
+              <span>${s.deaths || 0}</span>
+              <span>${kd}</span>
+              <span>${Math.round(s.damageDealt || 0)}</span>
+              <span>${pickups}</span>
+              <span>${turbo}</span>
+              <span>${jump}</span>
+            </div>
+            <div class="results-weapon-row">
+              <span class="results-weapon-label">Weapon Damage:</span>
+              <span class="results-weapon-chips">${renderWeaponDamageChips(s.weaponDamage)}</span>
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </section>
+  `).join('');
+  
+  if (ui.resultsBody) ui.resultsBody.innerHTML = leaderboardHTML;
+
+  // More Details — kill/death breakdown
+  if (ui.moreDetailsButton && ui.detailedResults) {
+    ui.detailedResults.classList.remove('expanded');
+    ui.moreDetailsButton.textContent = '▼ More Details';
+    ui.moreDetailsButton.onclick = () => {
+      const expanded = ui.detailedResults.classList.toggle('expanded');
+      ui.moreDetailsButton.textContent = expanded ? '▲ Hide Details' : '▼ More Details';
+    };
+    ui.detailedResults.innerHTML = renderDetailedBreakdown(ctx, entities);
+  }
+}
+
+// ── MVP Vehicle Portrait ─────────────────────────────────────
+let mvpPortraitRenderer = null;
+let mvpPortraitScene = null;
+let mvpPortraitCamera = null;
+let mvpPortraitGroup = null;
+let mvpPortraitAnimId = null;
+
+function renderMVPPortrait(ctx, mvp, canvas) {
+  if (!canvas) return;
+  // Find the MVP entity to get their vehicle blueprint
+  const mvpEntity = ctx.ecs.entities.find((e) => e.vehicle && e.displayName === mvp.name && e.teamId === mvp.teamId);
+  const blueprint = mvpEntity?.vehicle?.customBlueprint || mvpEntity?.vehicle?.catalogId || 'ether-runner';
+
+  // Cleanup previous
+  if (mvpPortraitAnimId) cancelAnimationFrame(mvpPortraitAnimId);
+  if (mvpPortraitRenderer) mvpPortraitRenderer.dispose();
+
+  mvpPortraitRenderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+  mvpPortraitRenderer.setSize(220, 220);
+  mvpPortraitRenderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  mvpPortraitRenderer.outputColorSpace = THREE.SRGBColorSpace;
+  mvpPortraitRenderer.toneMapping = THREE.ACESFilmicToneMapping;
+  mvpPortraitRenderer.toneMappingExposure = 1.2;
+
+  mvpPortraitScene = new THREE.Scene();
+  mvpPortraitCamera = new THREE.PerspectiveCamera(32, 1, 0.1, 50);
+  mvpPortraitCamera.position.set(5, 4.5, 5);
+  mvpPortraitCamera.lookAt(0, 0.3, 0);
+
+  // Lighting
+  const ambient = new THREE.AmbientLight(0xffffff, 0.6);
+  mvpPortraitScene.add(ambient);
+  const key = new THREE.DirectionalLight(0xffffff, 1.8);
+  key.position.set(3, 6, 2);
+  mvpPortraitScene.add(key);
+  const teamColor = new THREE.Color(mvp.teamColor || '#82ffcf');
+  const rim = new THREE.PointLight(teamColor, 1.5, 12);
+  rim.position.set(-3, 2, -3);
+  mvpPortraitScene.add(rim);
+  const fill = new THREE.PointLight(teamColor, 0.6, 10);
+  fill.position.set(2, 1, -4);
+  mvpPortraitScene.add(fill);
+
+  // Create vehicle preview
+  try {
+    const { createVehiclePreviewGroup } = ctx._vehicleFactory;
+    const preview = createVehiclePreviewGroup(ctx.materials, blueprint);
+    mvpPortraitGroup = preview.group;
+    mvpPortraitGroup.position.set(0, 0, 0);
+    mvpPortraitScene.add(mvpPortraitGroup);
+  } catch (e) {
+    console.warn('MVP portrait render failed:', e);
+    return;
+  }
+
+  // Animate spin
+  function animate() {
+    mvpPortraitAnimId = requestAnimationFrame(animate);
+    if (mvpPortraitGroup) mvpPortraitGroup.rotation.y += 0.008;
+    mvpPortraitRenderer.render(mvpPortraitScene, mvpPortraitCamera);
+  }
+  animate();
+}
+
+export function cleanupMVPPortrait() {
+  if (mvpPortraitAnimId) cancelAnimationFrame(mvpPortraitAnimId);
+  mvpPortraitAnimId = null;
+  if (mvpPortraitRenderer) mvpPortraitRenderer.dispose();
+  mvpPortraitRenderer = null;
+}
+
+// ── Detailed Kill/Death Breakdown ────────────────────────────
+function renderDetailedBreakdown(ctx, entities) {
+  const killLog = ctx.match?.killLog || [];
+  if (killLog.length === 0) return '<p class="no-data-text">No kill events recorded.</p>';
+
+  return entities.map((entity) => {
+    const name = entity.displayName || entity.vehicle?.name || '?';
+    const teamColor = entity.teamColor || '#82ffcf';
+    const teamId = entity.teamId;
+
+    // Kills made by this player
+    const killsMade = killLog.filter((k) => k.killerName === name && k.killerTeamId === teamId);
+    // Deaths suffered by this player
+    const deathsSuffered = killLog.filter((k) => k.victimName === name && k.victimTeamId === teamId);
+
+    // Group kills by victim
+    const killsByVictim = {};
+    for (const k of killsMade) {
+      const key = k.victimName;
+      if (!killsByVictim[key]) killsByVictim[key] = { name: k.victimName, color: k.victimTeamColor, count: 0, weapons: {} };
+      killsByVictim[key].count += 1;
+      const wep = weaponCatalog[k.weaponId];
+      const wName = wep?.name || (k.weaponId === 'collision' ? 'Collision' : k.weaponId);
+      killsByVictim[key].weapons[wName] = (killsByVictim[key].weapons[wName] || 0) + 1;
+    }
+
+    // Group deaths by killer
+    const deathsByKiller = {};
+    for (const d of deathsSuffered) {
+      const key = d.killerName;
+      if (!deathsByKiller[key]) deathsByKiller[key] = { name: d.killerName, color: d.killerTeamColor, count: 0, weapons: {} };
+      deathsByKiller[key].count += 1;
+      const wep = weaponCatalog[d.weaponId];
+      const wName = wep?.name || (d.weaponId === 'collision' ? 'Collision' : d.weaponId);
+      deathsByKiller[key].weapons[wName] = (deathsByKiller[key].weapons[wName] || 0) + 1;
+    }
+
+    const killEntries = Object.values(killsByVictim).sort((a, b) => b.count - a.count);
+    const deathEntries = Object.values(deathsByKiller).sort((a, b) => b.count - a.count);
+
+    const renderEntries = (entries, label) => {
+      if (entries.length === 0) return '<span class="no-data">None</span>';
+      return entries.map((e) => {
+        const weaponList = Object.entries(e.weapons).map(([w, c]) => `${w}×${c}`).join(', ');
+        return `<div class="detail-entry"><span class="detail-target" style="color:${esc(e.color)}">${esc(e.name)}</span><span class="detail-count">×${e.count}</span><span class="detail-weapons">${esc(weaponList)}</span></div>`;
+      }).join('');
+    };
+
+    return `
+      <div class="detail-player" style="--team-color:${esc(teamColor)}">
+        <header class="detail-player-header">
+          <strong style="color:${esc(teamColor)}">${esc(name)}</strong>
+          <span>${killsMade.length} Kills · ${deathsSuffered.length} Deaths</span>
+        </header>
+        <div class="detail-columns">
+          <div class="detail-column">
+            <h4>Eliminated ▼</h4>
+            ${renderEntries(killEntries, 'Killed')}
+          </div>
+          <div class="detail-column">
+            <h4>Eliminated By ▼</h4>
+            ${renderEntries(deathEntries, 'Killed by')}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 // ── Weapon Cards ─────────────────────────────────────────────
@@ -343,6 +631,10 @@ function updateWorldLabels(ctx, ui) {
       el.innerHTML = `
         <div class="world-label-name"></div>
         <div class="world-label-hp-bg"><div class="world-label-hp-fill"></div></div>
+        <div class="world-label-reload" style="display:none">
+          <div class="world-label-reload-bg"><div class="world-label-reload-fill"></div></div>
+          <span class="world-label-reload-text"></span>
+        </div>
       `;
       labels.appendChild(el);
       children.push(el);
@@ -359,6 +651,22 @@ function updateWorldLabels(ctx, ui) {
     const hpFill = el.querySelector('.world-label-hp-fill');
     const hpPct = Math.max(0, entity.health.current / entity.health.max);
     hpFill.style.transform = `scaleX(${hpPct})`;
+
+    // Reload bar
+    const turret = entity.weaponSlots?.turret;
+    const reloadEl = el.querySelector('.world-label-reload');
+    if (reloadEl && turret) {
+      if (turret.isReloading) {
+        reloadEl.style.display = '';
+        const reloadPct = 1 - (turret.reloadRemaining / turret.reloadTime);
+        const reloadFill = reloadEl.querySelector('.world-label-reload-fill');
+        const reloadText = reloadEl.querySelector('.world-label-reload-text');
+        reloadFill.style.transform = `scaleX(${reloadPct})`;
+        reloadText.textContent = `${turret.reloadRemaining.toFixed(1)}s`;
+      } else {
+        reloadEl.style.display = 'none';
+      }
+    }
     
     childIdx++;
   }

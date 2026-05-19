@@ -152,6 +152,7 @@ function explode(ctx, projectile, effects, physics) {
             force,
             screenShake: weapon.screenShake || 0,
             cameraEffects: ctx.cameraEffects,
+            weaponId: weapon.id,
           });
         } else {
           applyImpactPush(target, { origin, radius: weapon.splashRadius, force });
@@ -167,7 +168,21 @@ export function findProjectileWorldHit(ctx, projectile) {
   const speed = Math.hypot(projectile.velocity.x, projectile.velocity.z);
   const probeSize = Math.max(radius * 2.2, Math.min(3.8, speed * 0.02 + radius * 2));
   const obb = makeObb(projectile.transform.x, projectile.transform.z, probeSize, probeSize, projectile.transform.yaw || 0);
+  const projY = projectile.transform.y ?? 0.7;
   const nearbyShapes = ctx.collisionShapes.filter((shape) => {
+    let obstacleHeight = 0;
+    if (shape.type === 'wall' || shape.type === 'building') {
+      obstacleHeight = 35; // Tall obstacles/boundaries
+    } else if (shape.type === 'barrier') {
+      obstacleHeight = 0.6;
+    } else if (shape.type === 'crate') {
+      obstacleHeight = 1.8;
+    } else if (shape.type === 'parked-car') {
+      obstacleHeight = 1.3;
+    }
+    
+    if (projY >= obstacleHeight) return false; // Fly over low obstacles
+    
     const reach = Math.max(shape.w || 0, shape.d || 0) * 0.5 + probeSize + 3;
     return distance2D(projectile.transform, shape) <= reach;
   });
@@ -250,6 +265,11 @@ export function updateWeapons(ctx, physics, dt, effects) {
       const dir = forwardFromYaw(next);
       projectile.velocity.x = dir.x * weapon.speed;
       projectile.velocity.z = dir.z * weapon.speed;
+      
+      // Vertical Y tracking
+      const currentY = projectile.transform.y ?? 0.7;
+      const targetY = (p.target.transform.y || 0) + 0.78; // Target vehicle's center ride height
+      projectile.transform.y = THREE.MathUtils.lerp(currentY, targetY, Math.min(1, dt * weapon.homingStrength * 2.0));
     }
     projectile.transform.x += projectile.velocity.x * dt;
     projectile.transform.z += projectile.velocity.z * dt;
@@ -275,7 +295,22 @@ export function updateWeapons(ctx, physics, dt, effects) {
     }
 
     if (p.age > p.armTime) {
-      const hit = ctx.ecs.entities.find((e) => e.vehicle && e.teamId !== p.teamId && !e.health.dead && distance2D(e.transform, projectile.transform) < weapon.radius + 1.3);
+      const hit = ctx.ecs.entities.find((e) => {
+        if (!e.vehicle || e.teamId === p.teamId || e.health.dead) return false;
+        
+        // 2D distance check
+        const dist2D = distance2D(e.transform, projectile.transform);
+        if (dist2D >= weapon.radius + 1.3) return false;
+        
+        // Vertical height overlap check
+        const vehicleY = e.transform.y || 0;
+        const vehicleHeight = 1.5;
+        const projY = projectile.transform.y ?? 0.7;
+        const projRadius = weapon.radius || 0.25;
+        
+        const verticalOverlap = (projY + projRadius >= vehicleY) && (projY - projRadius <= vehicleY + vehicleHeight);
+        return verticalOverlap;
+      });
       if (hit) {
         applyDamage(hit, weapon.damage, weapon.damageType, p.owner, effects, {
           ctx,
@@ -283,6 +318,7 @@ export function updateWeapons(ctx, physics, dt, effects) {
           force: weapon.impactForce || 0,
           screenShake: weapon.screenShake || 0,
           cameraEffects: ctx.cameraEffects,
+          weaponId: weapon.id,
         });
         if (p.pierce > 0) p.pierce -= 1;
         else explode(ctx, projectile, effects, physics);
