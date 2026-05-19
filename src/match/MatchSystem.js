@@ -325,6 +325,7 @@ export function getScoreRows(ctx) {
       turretAmmo: e.weaponSlots.turret ? `${Math.ceil(e.weaponSlots.turret.ammoInMagazine)}/${e.weaponSlots.turret.magazineSize}` : '-',
       q: e.weaponSlots.q?.weaponId || '-',
       e: e.weaponSlots.e?.weaponId || '-',
+      isPlayer: e === ctx.player,
     }))
     .sort((a, b) => b.kills - a.kills || a.deaths - b.deaths);
 }

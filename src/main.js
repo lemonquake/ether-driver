@@ -4,11 +4,11 @@ import { createGameContext, resizeContext } from './core/GameContext.js';
 import { setupInput } from './core/InputSystem.js';
 import { createRapierPhysics } from './physics/RapierPhysics.js';
 import { createMaterials } from './world/materials.js';
-import { buildMap } from './world/MapSystem.js';
+import { mapRegistry } from './data/maps.js';
 import { updateVehicles } from './vehicles/VehicleSystem.js';
 import { createParticleSystem } from './effects/ParticleSystem.js';
 import { createCameraEffects } from './effects/CameraEffectsSystem.js';
-import { createPickups, updatePickups } from './pickups/PickupSystem.js';
+import { createPickups, updatePickups, clearPickups } from './pickups/PickupSystem.js';
 import { updateAim } from './combat/AimSystem.js';
 import { updateWeapons } from './combat/WeaponSystem.js';
 import { updateDamageVisuals } from './combat/DamageSystem.js';
@@ -115,10 +115,1018 @@ setupTeams.forEach((team) => {
   pendingTeamColors[team.id] = team.color;
 });
 
-buildMap(ctx, materials);
-ctx.navigation = generateNavigationGraph(ctx);
+let selectedMapId = 'city';
+
+function rebuildGameMap(mapId) {
+  ctx.activeMapId = mapId;
+  // 1. Traverse and dispose old map assets inside mapGroup to prevent memory leaks
+  if (ctx.mapGroup) {
+    ctx.mapGroup.traverse((object) => {
+      if (object.isMesh) {
+        if (object.geometry) object.geometry.dispose();
+        if (object.material) {
+          if (Array.isArray(object.material)) {
+            object.material.forEach((mat) => mat.dispose());
+          } else {
+            object.material.dispose();
+          }
+        }
+      }
+    });
+    ctx.scene.remove(ctx.mapGroup);
+  }
+
+  // 2. Setup fresh map group container
+  ctx.mapGroup = new THREE.Group();
+  ctx.scene.add(ctx.mapGroup);
+
+  // Clear system collision/minimap/ramp/road arrays
+  ctx.collisionShapes = [];
+  ctx.minimapObjects = [];
+  ctx.roads = [];
+  ctx.specialTiles = [];
+  ctx.ramps = [];
+  ctx.pickups = [];
+  ctx.beacons = [];
+
+  // 3. Remove old pickups meshes and physical sensors
+  clearPickups(ctx, physics);
+
+  // 4. Override scene.add temporarily to group everything added by builders under mapGroup
+  const originalSceneAdd = ctx.scene.add;
+  ctx.scene.add = function (object) {
+    if (ctx.mapGroup) {
+      ctx.mapGroup.add(object);
+    } else {
+      originalSceneAdd.call(ctx.scene, object);
+    }
+  };
+
+  // 5. Build selected map
+  const mapData = mapRegistry[mapId] || mapRegistry.city;
+  mapData.build(ctx, materials);
+
+  // Restore scene.add
+  ctx.scene.add = originalSceneAdd;
+
+  // 6. Generate pathfinding grid and spawn pickup physical sensors
+  ctx.navigation = generateNavigationGraph(ctx);
+  createPickups(ctx, physics);
+
+  // 7. Tune shadow-casting directional lights for soft, high-quality shadows
+  ctx.scene.traverse((node) => {
+    if (node.isDirectionalLight) {
+      node.shadow.bias = -0.0005;
+      node.shadow.camera.near = 0.5;
+      node.shadow.camera.far = 450;
+      node.shadow.camera.left = -250;
+      node.shadow.camera.right = 250;
+      node.shadow.camera.top = 250;
+      node.shadow.camera.bottom = -250;
+      node.shadow.mapSize.set(2048, 2048);
+      node.shadow.needsUpdate = true;
+    }
+  });
+
+  // 8. Generate dynamic PMREM reflection environment map & high-fidelity custom skybox backgrounds
+  if (ctx.scene.background && ctx.scene.background.dispose) {
+    ctx.scene.background.dispose();
+  }
+  if (ctx.scene.environment) {
+    ctx.scene.environment.dispose();
+    ctx.scene.environment = null;
+  }
+
+  // A. Build the High-Resolution Skybox (2048 x 1024)
+  const skyCanvas = document.createElement('canvas');
+  skyCanvas.width = 2048;
+  skyCanvas.height = 1024;
+  const skyCtx = skyCanvas.getContext('2d');
+  const skyGrad = skyCtx.createLinearGradient(0, 0, 0, 1024);
+
+  // B. Build the PMREM Reflections Gradient Canvas (512 x 256)
+  const envCanvas = document.createElement('canvas');
+  envCanvas.width = 512;
+  envCanvas.height = 256;
+  const envCtx = envCanvas.getContext('2d');
+  const envGrad = envCtx.createLinearGradient(0, 0, 0, 256);
+
+  if (mapId === 'city') {
+    // High-fidelity Cyber Skybox
+    skyGrad.addColorStop(0, '#06040c');     // deep space
+    skyGrad.addColorStop(0.35, '#0b0818');  // cyber blue night
+    skyGrad.addColorStop(0.6, '#260a3c');   // neon violet glow
+    skyGrad.addColorStop(0.72, '#5a134a');  // cyber magenta haze
+    skyGrad.addColorStop(0.85, '#75143a');  // horizon cyber glow
+    skyGrad.addColorStop(1.0, '#090714');   // deep ground shadow
+
+    // Reflection Map Gradient
+    envGrad.addColorStop(0, '#090714');
+    envGrad.addColorStop(0.45, '#12395a');
+    envGrad.addColorStop(0.8, '#701452');
+    envGrad.addColorStop(1.0, '#100a14');
+
+    ctx.scene.fog = new THREE.FogExp2(0x090714, 0.0055);
+  } else if (mapId === 'basin') {
+    // High-fidelity Magma Wasteland Skybox
+    skyGrad.addColorStop(0, '#0a0604');     // sulfur vacuum
+    skyGrad.addColorStop(0.3, '#210c03');    // volcanic haze
+    skyGrad.addColorStop(0.55, '#4f1401');   // obsidian red clouds
+    skyGrad.addColorStop(0.72, '#922000');   // burning magma flare
+    skyGrad.addColorStop(0.85, '#c53802');   // bright lava horizon
+    skyGrad.addColorStop(1.0, '#180f0b');    // ash ground shadow
+
+    // Reflection Map Gradient
+    envGrad.addColorStop(0, '#180f0b');
+    envGrad.addColorStop(0.45, '#6c2900');
+    envGrad.addColorStop(0.8, '#911000');
+    envGrad.addColorStop(1.0, '#0f0603');
+
+    ctx.scene.fog = new THREE.FogExp2(0x180f0b, 0.0065);
+  } else if (mapId === 'outpost') {
+    // High-fidelity Sci-Fi Reactor Void Skybox
+    skyGrad.addColorStop(0, '#030107');     // electromagnetic void
+    skyGrad.addColorStop(0.35, '#0a051c');  // core purple
+    skyGrad.addColorStop(0.55, '#04222c');  // deep tech cyan
+    skyGrad.addColorStop(0.7, '#08483b');   // radioactive emerald
+    skyGrad.addColorStop(0.85, '#0f6e52');  // bright toxic neon horizon
+    skyGrad.addColorStop(1.0, '#0a0312');   // void ground shadow
+
+    // Reflection Map Gradient
+    envGrad.addColorStop(0, '#0a0312');
+    envGrad.addColorStop(0.45, '#006575');
+    envGrad.addColorStop(0.8, '#137018');
+    envGrad.addColorStop(1.0, '#05010a');
+
+    ctx.scene.fog = new THREE.FogExp2(0x0a0312, 0.0075);
+  } else if (mapId === 'military') {
+    // High-fidelity Tactical Military Green Skybox
+    skyGrad.addColorStop(0, '#040806');     // deep tactical void
+    skyGrad.addColorStop(0.35, '#07120a');  // tactical olive green
+    skyGrad.addColorStop(0.55, '#0f2413');  // dark laser green
+    skyGrad.addColorStop(0.72, '#183c1d');  // military green core
+    skyGrad.addColorStop(0.85, '#2f5b35');  // bright tactical green horizon
+    skyGrad.addColorStop(1.0, '#040806');   // deep ground shadow
+
+    // Reflection Map Gradient
+    envGrad.addColorStop(0, '#040806');
+    envGrad.addColorStop(0.45, '#0f3c1d');
+    envGrad.addColorStop(0.8, '#55ff55');
+    envGrad.addColorStop(1.0, '#040806');
+
+    ctx.scene.fog = new THREE.FogExp2(0x040806, 0.0065);
+  } else if (mapId === 'hangar') {
+    // High-fidelity Industrial Hangar Steel Skybox
+    skyGrad.addColorStop(0, '#06070a');     // deep steel space
+    skyGrad.addColorStop(0.35, '#12161f');  // cold industrial grey
+    skyGrad.addColorStop(0.55, '#2c221e');  // warm rust glow
+    skyGrad.addColorStop(0.72, '#5e381b');  // industrial orange glow
+    skyGrad.addColorStop(0.85, '#8c4815');  // boiling lava horizon reflection
+    skyGrad.addColorStop(1.0, '#06070a');   // deep ground shadow
+
+    // Reflection Map Gradient
+    envGrad.addColorStop(0, '#06070a');
+    envGrad.addColorStop(0.45, '#35485a');
+    envGrad.addColorStop(0.8, '#ff5f00');
+    envGrad.addColorStop(1.0, '#06070a');
+
+    ctx.scene.fog = new THREE.FogExp2(0x06070a, 0.0075);
+  } else {
+    // Default Sky
+    skyGrad.addColorStop(0, '#8fb5d0');
+    skyGrad.addColorStop(1.0, '#ffd8c4');
+
+    envGrad.addColorStop(0, '#8fb5d0');
+    envGrad.addColorStop(1.0, '#ffd8c4');
+
+    ctx.scene.fog = new THREE.FogExp2(0x8fb5d0, 0.0065);
+  }
+
+  // Paint the gradients
+  skyCtx.fillStyle = skyGrad;
+  skyCtx.fillRect(0, 0, 2048, 1024);
+
+  envCtx.fillStyle = envGrad;
+  envCtx.fillRect(0, 0, 512, 256);
+
+  // Paint intricate details onto the Skybox
+  if (mapId === 'city') {
+    // 1. Draw 250 gorgeous stars
+    skyCtx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    for (let i = 0; i < 250; i++) {
+      const sx = Math.random() * 2048;
+      const sy = Math.random() * 650; // top half of sky
+      const size = Math.random() * 1.8 + 0.5;
+      
+      // Star dot
+      skyCtx.beginPath();
+      skyCtx.arc(sx, sy, size, 0, Math.PI * 2);
+      skyCtx.fill();
+
+      // Occasional glowing lens flare cross (4-point star)
+      if (i % 24 === 0) {
+        skyCtx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+        skyCtx.lineWidth = 0.8;
+        skyCtx.beginPath();
+        skyCtx.moveTo(sx - 6, sy);
+        skyCtx.lineTo(sx + 6, sy);
+        skyCtx.moveTo(sx, sy - 6);
+        skyCtx.lineTo(sx, sy + 6);
+        skyCtx.stroke();
+      }
+    }
+
+    // 2. Draw giant digital cyber moon
+    const mx = 512;  // Left-ish sky position
+    const my = 350;  // Slightly above horizon
+    const mr = 110;  // Moon radius
+
+    // Moon Glow
+    const moonGlow = skyCtx.createRadialGradient(mx, my, mr * 0.7, mx, my, mr * 2.2);
+    moonGlow.addColorStop(0, 'rgba(0, 240, 255, 0.4)');
+    moonGlow.addColorStop(0.3, 'rgba(130, 255, 207, 0.15)');
+    moonGlow.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+    skyCtx.fillStyle = moonGlow;
+    skyCtx.beginPath();
+    skyCtx.arc(mx, my, mr * 2.2, 0, Math.PI * 2);
+    skyCtx.fill();
+
+    // Concentric digital neon rings
+    skyCtx.strokeStyle = 'rgba(130, 255, 207, 0.28)';
+    skyCtx.lineWidth = 1.5;
+    skyCtx.beginPath();
+    skyCtx.arc(mx, my, mr * 1.35, 0, Math.PI * 2);
+    skyCtx.stroke();
+
+    skyCtx.strokeStyle = 'rgba(0, 240, 255, 0.15)';
+    skyCtx.lineWidth = 1.0;
+    skyCtx.beginPath();
+    skyCtx.arc(mx, my, mr * 1.6, 0, Math.PI * 2);
+    skyCtx.stroke();
+
+    // Moon Core Body (glowing cyan circle)
+    const moonCore = skyCtx.createRadialGradient(mx, my, 0, mx, my, mr);
+    moonCore.addColorStop(0, '#ffffff');
+    moonCore.addColorStop(0.2, '#d7fffa');
+    moonCore.addColorStop(0.8, '#82ffcf');
+    moonCore.addColorStop(1.0, '#35cfb0');
+    skyCtx.fillStyle = moonCore;
+    skyCtx.beginPath();
+    skyCtx.arc(mx, my, mr, 0, Math.PI * 2);
+    skyCtx.fill();
+
+    // Horizontal scanning digital incisions/cuts
+    skyCtx.fillStyle = '#06040c'; // Matches dark background color
+    for (let y = my - mr; y < my + mr; y += 18) {
+      if (Math.abs(y - my) < mr * 0.88) {
+        const thickness = 2.8 + Math.sin((y - my) * 0.15) * 1.2;
+        const moonW = Math.sqrt(mr * mr - (y - my) * (y - my));
+        skyCtx.fillRect(mx - moonW - 2, y, moonW * 2 + 4, thickness);
+      }
+    }
+
+    // 3. Draw a tech horizon wireframe grid
+    skyCtx.strokeStyle = 'rgba(130, 255, 207, 0.08)';
+    skyCtx.lineWidth = 1;
+    const horizonY = 700;
+    // Horizontal perspective lines
+    for (let y = horizonY; y < 850; y += 16) {
+      const opacity = (1.0 - (y - horizonY) / 150) * 0.12;
+      skyCtx.strokeStyle = `rgba(130, 255, 207, ${opacity})`;
+      skyCtx.beginPath();
+      skyCtx.moveTo(0, y);
+      skyCtx.lineTo(2048, y);
+      skyCtx.stroke();
+    }
+  } else if (mapId === 'basin') {
+    // Volcanic Sun and Heat Haze
+    // 1. Draw solar embers
+    for (let i = 0; i < 180; i++) {
+      const sx = Math.random() * 2048;
+      const sy = Math.random() * 700;
+      const size = Math.random() * 2.8 + 0.8;
+      
+      const glow = skyCtx.createRadialGradient(sx, sy, 0, sx, sy, size * 2.5);
+      glow.addColorStop(0, 'rgba(255, 120, 0, 0.8)');
+      glow.addColorStop(0.4, 'rgba(255, 60, 0, 0.35)');
+      glow.addColorStop(1, 'rgba(0,0,0,0)');
+      
+      skyCtx.fillStyle = glow;
+      skyCtx.beginPath();
+      skyCtx.arc(sx, sy, size * 2.5, 0, Math.PI * 2);
+      skyCtx.fill();
+    }
+
+    // 2. Draw giant dying solar giant (magma sun)
+    const sx = 1433; // Right-ish sky
+    const sy = 400;  // High horizon
+    const sr = 170;  // Giant radius
+
+    // Huge solar atmosphere glow
+    const sunGlow = skyCtx.createRadialGradient(sx, sy, sr * 0.5, sx, sy, sr * 2.8);
+    sunGlow.addColorStop(0, 'rgba(255, 95, 0, 0.5)');
+    sunGlow.addColorStop(0.4, 'rgba(180, 30, 0, 0.22)');
+    sunGlow.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+    skyCtx.fillStyle = sunGlow;
+    skyCtx.beginPath();
+    skyCtx.arc(sx, sy, sr * 2.8, 0, Math.PI * 2);
+    skyCtx.fill();
+
+    // Sun core (burning yellow/white with magma dark spots)
+    const sunCore = skyCtx.createRadialGradient(sx, sy, 0, sx, sy, sr);
+    sunCore.addColorStop(0, '#ffffff');
+    sunCore.addColorStop(0.2, '#ffe066');
+    sunCore.addColorStop(0.6, '#ff6c00');
+    sunCore.addColorStop(0.9, '#a51500');
+    sunCore.addColorStop(1.0, '#3a0200');
+    skyCtx.fillStyle = sunCore;
+    skyCtx.beginPath();
+    skyCtx.arc(sx, sy, sr, 0, Math.PI * 2);
+    skyCtx.fill();
+
+    // Magma solar flares (wavy horizontal dark plumes)
+    skyCtx.fillStyle = 'rgba(20, 4, 0, 0.72)'; // Dark ash plumes
+    for (let i = 0; i < 6; i++) {
+      const py = sy - sr * 0.7 + Math.random() * sr * 1.4;
+      const pw = Math.sqrt(sr * sr - (py - sy) * (py - sy)) * 1.6;
+      skyCtx.beginPath();
+      skyCtx.ellipse(sx + (Math.random() - 0.5) * 60, py, pw * 0.6, 6 + Math.random() * 8, 0.08, 0, Math.PI * 2);
+      skyCtx.fill();
+    }
+  } else if (mapId === 'outpost') {
+    // 1. Constellation digital grid network
+    const points = [];
+    for (let i = 0; i < 30; i++) {
+      points.push({
+        x: 100 + Math.random() * 1848,
+        y: 100 + Math.random() * 500,
+        r: Math.random() * 2.2 + 0.8
+      });
+    }
+
+    // Draw glowing tech lines connecting nearest points
+    skyCtx.strokeStyle = 'rgba(0, 255, 204, 0.14)';
+    skyCtx.lineWidth = 1.0;
+    for (let i = 0; i < points.length; i++) {
+      const p1 = points[i];
+      for (let j = i + 1; j < points.length; j++) {
+        const p2 = points[j];
+        const dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
+        if (dist < 260) {
+          skyCtx.beginPath();
+          skyCtx.moveTo(p1.x, p1.y);
+          skyCtx.lineTo(p2.x, p2.y);
+          skyCtx.stroke();
+        }
+      }
+    }
+
+    // Draw point stars
+    skyCtx.fillStyle = '#00ffcc';
+    points.forEach(p => {
+      skyCtx.beginPath();
+      skyCtx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      skyCtx.fill();
+      
+      if (p.r > 2.0) {
+        skyCtx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+        skyCtx.beginPath();
+        skyCtx.arc(p.x, p.y, p.r * 0.4, 0, Math.PI * 2);
+        skyCtx.fill();
+        skyCtx.fillStyle = '#00ffcc';
+      }
+    });
+
+    // 2. Draw ringed gas giant planet (Neon Giant)
+    const px = 1024; // Center sky
+    const py = 320;  // High sky
+    const pr = 140;  // Radius
+
+    // Planet Atmospheric Outer Glow
+    const planetGlow = skyCtx.createRadialGradient(px, py, pr * 0.8, px, py, pr * 2.0);
+    planetGlow.addColorStop(0, 'rgba(0, 100, 255, 0.38)');
+    planetGlow.addColorStop(0.4, 'rgba(0, 255, 204, 0.16)');
+    planetGlow.addColorStop(1.0, 'rgba(0, 0, 0, 0)');
+    skyCtx.fillStyle = planetGlow;
+    skyCtx.beginPath();
+    skyCtx.arc(px, py, pr * 2.0, 0, Math.PI * 2);
+    skyCtx.fill();
+
+    // Planet Body (striped cyan, blue, purple)
+    const bodyGrad = skyCtx.createLinearGradient(px - pr, py - pr, px + pr, py + pr);
+    bodyGrad.addColorStop(0, '#0a051c');
+    bodyGrad.addColorStop(0.35, '#2b0a5a');
+    bodyGrad.addColorStop(0.6, '#006575');
+    bodyGrad.addColorStop(0.85, '#00ffcc');
+    bodyGrad.addColorStop(1.0, '#ffffff');
+
+    skyCtx.fillStyle = bodyGrad;
+    skyCtx.beginPath();
+    skyCtx.arc(px, py, pr, 0, Math.PI * 2);
+    skyCtx.fill();
+
+    // Dynamic planetary rings (drawn as an inclined ellipse)
+    skyCtx.save();
+    skyCtx.strokeStyle = 'rgba(0, 255, 204, 0.62)';
+    skyCtx.lineWidth = 14;
+    skyCtx.beginPath();
+    skyCtx.ellipse(px, py, pr * 2.2, pr * 0.35, -Math.PI / 9, 0, Math.PI * 2);
+    skyCtx.stroke();
+    
+    skyCtx.strokeStyle = 'rgba(100, 50, 255, 0.28)';
+    skyCtx.lineWidth = 6;
+    skyCtx.beginPath();
+    skyCtx.ellipse(px, py, pr * 2.45, pr * 0.40, -Math.PI / 9, 0, Math.PI * 2);
+    skyCtx.stroke();
+    skyCtx.restore();
+
+    // Redraw front half of the planet to overlay the rings correctly!
+    skyCtx.save();
+    skyCtx.beginPath();
+    skyCtx.arc(px, py, pr, -Math.PI * 0.9, Math.PI * 0.1);
+    skyCtx.clip();
+    skyCtx.fillStyle = bodyGrad;
+    skyCtx.beginPath();
+    skyCtx.arc(px, py, pr, 0, Math.PI * 2);
+    skyCtx.fill();
+    skyCtx.restore();
+
+    // 3. Draw arcing tech lightning path in the background
+    skyCtx.strokeStyle = 'rgba(255, 43, 214, 0.35)';
+    skyCtx.lineWidth = 2.5;
+    skyCtx.shadowColor = '#ff2bd6';
+    skyCtx.shadowBlur = 15;
+    skyCtx.beginPath();
+    let lx = 300 + Math.random() * 200;
+    let ly = 100;
+    skyCtx.moveTo(lx, ly);
+    for (let i = 0; i < 8; i++) {
+      lx += (Math.random() - 0.5) * 80 + 40;
+      ly += Math.random() * 60 + 40;
+      skyCtx.lineTo(lx, ly);
+    }
+    skyCtx.stroke();
+    skyCtx.shadowBlur = 0; // Reset
+  } else if (mapId === 'military') {
+    // 1. Bubbling tactical green stars
+    skyCtx.fillStyle = 'rgba(85, 255, 120, 0.65)';
+    for (let i = 0; i < 180; i++) {
+      const sx = Math.random() * 2048;
+      const sy = Math.random() * 650;
+      const size = Math.random() * 1.5 + 0.5;
+      skyCtx.beginPath();
+      skyCtx.arc(sx, sy, size, 0, Math.PI * 2);
+      skyCtx.fill();
+    }
+
+    // 2. Giant holographic tactical radar crosshair scope
+    const rx = 1500;
+    const ry = 380;
+    const rd = 120;
+
+    // Glowing scope background circular waves
+    skyCtx.strokeStyle = 'rgba(85, 255, 85, 0.22)';
+    skyCtx.lineWidth = 1.5;
+    skyCtx.beginPath();
+    skyCtx.arc(rx, ry, rd, 0, Math.PI * 2);
+    skyCtx.stroke();
+    
+    skyCtx.strokeStyle = 'rgba(85, 255, 85, 0.08)';
+    skyCtx.beginPath();
+    skyCtx.arc(rx, ry, rd * 1.45, 0, Math.PI * 2);
+    skyCtx.stroke();
+
+    // Crosshairs lines
+    skyCtx.strokeStyle = 'rgba(85, 255, 85, 0.35)';
+    skyCtx.lineWidth = 1.0;
+    skyCtx.beginPath();
+    // Horizontal crosshair
+    skyCtx.moveTo(rx - rd * 1.6, ry);
+    skyCtx.lineTo(rx - rd * 0.2, ry);
+    skyCtx.moveTo(rx + rd * 0.2, ry);
+    skyCtx.lineTo(rx + rd * 1.6, ry);
+    // Vertical crosshair
+    skyCtx.moveTo(rx, ry - rd * 1.6);
+    skyCtx.lineTo(rx, ry - rd * 0.2);
+    skyCtx.moveTo(rx, ry + rd * 0.2);
+    skyCtx.lineTo(rx, ry + rd * 1.6);
+    skyCtx.stroke();
+
+    // Small telemetry data texts and dashes
+    skyCtx.fillStyle = 'rgba(85, 255, 85, 0.45)';
+    skyCtx.font = '10px Courier New, monospace';
+    skyCtx.fillText('TARGET LOCK: SEC_04', rx - 55, ry - rd * 1.1);
+    skyCtx.fillText('GRID REF: 50.1130', rx - 55, ry + rd * 1.15);
+
+    // 3. Horizontal green scanner laser lines running across the sky
+    skyCtx.strokeStyle = 'rgba(85, 255, 85, 0.05)';
+    skyCtx.lineWidth = 1.0;
+    for (let y = 150; y < 650; y += 45) {
+      skyCtx.beginPath();
+      skyCtx.moveTo(0, y);
+      skyCtx.lineTo(2048, y);
+      skyCtx.stroke();
+    }
+  } else if (mapId === 'hangar') {
+    // 1. Rising warm embers from the lava deck
+    skyCtx.fillStyle = 'rgba(255, 120, 30, 0.6)';
+    for (let i = 0; i < 75; i++) {
+      const sx = Math.random() * 2048;
+      const sy = Math.random() * 700;
+      const size = Math.random() * 2.2 + 0.8;
+      skyCtx.beginPath();
+      skyCtx.arc(sx, sy, size, 0, Math.PI * 2);
+      skyCtx.fill();
+    }
+
+    // 2. High-altitude steel structural hangar trusses
+    // Draw heavy diagonal truss beams
+    skyCtx.strokeStyle = 'rgba(16, 18, 22, 0.96)';
+    skyCtx.lineWidth = 26;
+    skyCtx.beginPath();
+    
+    // Draw diagonal grid pattern
+    for (let x = -200; x < 2200; x += 400) {
+      skyCtx.moveTo(x, 0);
+      skyCtx.lineTo(x + 400, 550);
+      skyCtx.moveTo(x + 400, 0);
+      skyCtx.lineTo(x, 550);
+    }
+    skyCtx.stroke();
+
+    // Draw horizontal support chord beams
+    skyCtx.lineWidth = 16;
+    skyCtx.beginPath();
+    skyCtx.moveTo(0, 100);
+    skyCtx.lineTo(2048, 100);
+    skyCtx.moveTo(0, 380);
+    skyCtx.lineTo(2048, 380);
+    skyCtx.stroke();
+
+    // Draw glowing safety indicators & rivets at truss intersections
+    skyCtx.fillStyle = 'rgba(255, 95, 0, 0.85)';
+    for (let x = 0; x <= 2048; x += 200) {
+      // Small glowing orange warning lights on the trusses
+      skyCtx.beginPath();
+      skyCtx.arc(x, 100, 4.5, 0, Math.PI * 2);
+      skyCtx.arc(x, 380, 4.5, 0, Math.PI * 2);
+      skyCtx.fill();
+    }
+  }
+
+  // Create High-Res Sky Texture
+  const skyTexture = new THREE.CanvasTexture(skyCanvas);
+  skyTexture.mapping = THREE.EquirectangularReflectionMapping;
+  skyTexture.colorSpace = THREE.SRGBColorSpace;
+  ctx.scene.background = skyTexture;
+
+  // C. Create PMREM Environment reflection texture using the blurred reflections gradient canvas
+  const pmremGenerator = new THREE.PMREMGenerator(ctx.renderer);
+  pmremGenerator.compileEquirectangularShader();
+
+  const envTexture = new THREE.CanvasTexture(envCanvas);
+  envTexture.mapping = THREE.EquirectangularReflectionMapping;
+  const envRt = pmremGenerator.fromEquirectangular(envTexture);
+  ctx.scene.environment = envRt.texture;
+
+  // Clean up textures and generators to prevent memory leaks
+  envTexture.dispose();
+  pmremGenerator.dispose();
+
+  // 9. Pre-allocate projectile PointLights & Meshes pool to completely eliminate real-time WebGL shader recompilation and mesh instantiation lag
+  if (ctx.projectileLightPool) {
+    ctx.projectileLightPool.forEach((light) => {
+      ctx.scene.remove(light);
+    });
+  }
+  ctx.projectileLightPool = [];
+  for (let i = 0; i < 45; i++) {
+    const light = new THREE.PointLight(0xffffff, 0, 15, 1.8);
+    light.position.set(0, -1000, 0);
+    light.castShadow = false;
+    ctx.scene.add(light);
+    ctx.projectileLightPool.push(light);
+  }
+
+  if (ctx.projectileMeshPool) {
+    if (ctx.projectileMeshPool.length > 0) {
+      ctx.projectileMeshPool[0].geometry.dispose(); // Shared geometry
+    }
+    ctx.projectileMeshPool.forEach((mesh) => {
+      ctx.scene.remove(mesh);
+      mesh.material.dispose();
+    });
+  }
+  ctx.projectileMeshPool = [];
+  const projGeom = new THREE.SphereGeometry(1, 8, 8); // Reusable base geometry
+  for (let i = 0; i < 45; i++) {
+    const projMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+    const mesh = new THREE.Mesh(projGeom, projMat);
+    mesh.position.set(0, -1000, 0);
+    mesh.visible = false;
+    mesh.isPooled = true; // Mark as pooled for high-performance recycling
+    ctx.scene.add(mesh);
+    ctx.projectileMeshPool.push(mesh);
+  }
+}
+
+// --- Map Blueprint Drawings & Radar Sweeps ---
+const radarBlips = {
+  city: [
+    { x: 90, y: 60, angle: 0, distance: 0, lastIntensity: 0 },
+    { x: 190, y: 130, angle: 0, distance: 0, lastIntensity: 0 },
+    { x: 80, y: 140, angle: 0, distance: 0, lastIntensity: 0 }
+  ],
+  basin: [
+    { x: 60, y: 110, angle: 0, distance: 0, lastIntensity: 0 },
+    { x: 220, y: 70, angle: 0, distance: 0, lastIntensity: 0 },
+    { x: 140, y: 50, angle: 0, distance: 0, lastIntensity: 0 }
+  ],
+  outpost: [
+    { x: 180, y: 60, angle: 0, distance: 0, lastIntensity: 0 },
+    { x: 100, y: 130, angle: 0, distance: 0, lastIntensity: 0 },
+    { x: 70, y: 70, angle: 0, distance: 0, lastIntensity: 0 }
+  ]
+};
+
+// Precompute blip angles and distances relative to the canvas center (140, 90)
+Object.keys(radarBlips).forEach(mapId => {
+  radarBlips[mapId].forEach(blip => {
+    const dx = blip.x - 140;
+    const dy = blip.y - 90;
+    blip.angle = Math.atan2(dy, dx);
+    if (blip.angle < 0) blip.angle += Math.PI * 2;
+    blip.distance = Math.sqrt(dx * dx + dy * dy);
+  });
+});
+
+let radarAngle = 0;
+
+function drawMapBlueprints() {
+  const mapIds = ['city', 'basin', 'outpost'];
+  mapIds.forEach((mapId) => {
+    const canvasEl = document.querySelector(`.map-blueprint-canvas[data-canvas-map="${mapId}"]`);
+    if (!canvasEl) return;
+    const c = canvasEl.getContext('2d');
+    const w = canvasEl.width;
+    const h = canvasEl.height;
+    
+    // Clear canvas
+    c.clearRect(0, 0, w, h);
+    
+    // Draw background tech grid lines
+    c.strokeStyle = 'rgba(0, 240, 255, 0.04)';
+    c.lineWidth = 1;
+    for (let x = 10; x < w; x += 20) {
+      c.beginPath();
+      c.moveTo(x, 0);
+      c.lineTo(x, h);
+      c.stroke();
+    }
+    for (let y = 10; y < h; y += 20) {
+      c.beginPath();
+      c.moveTo(0, y);
+      c.lineTo(w, y);
+      c.stroke();
+    }
+    
+    if (mapId === 'city') {
+      // --- Megalopolis Mayhem Blueprint ---
+      // Outer border box
+      c.strokeStyle = 'rgba(130, 255, 207, 0.35)';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.rect(15, 10, w - 30, h - 20);
+      c.stroke();
+      
+      // Corners crosshairs/indicators
+      c.strokeStyle = 'rgba(130, 255, 207, 0.6)';
+      c.lineWidth = 1;
+      const cornerSize = 8;
+      // top-left
+      c.beginPath(); c.moveTo(10, 10); c.lineTo(10 + cornerSize, 10); c.moveTo(10, 10); c.lineTo(10, 10 + cornerSize); c.stroke();
+      // top-right
+      c.beginPath(); c.moveTo(w - 10, 10); c.lineTo(w - 10 - cornerSize, 10); c.moveTo(w - 10, 10); c.lineTo(w - 10, 10 + cornerSize); c.stroke();
+      // bottom-left
+      c.beginPath(); c.moveTo(10, h - 10); c.lineTo(10 + cornerSize, h - 10); c.moveTo(10, h - 10); c.lineTo(10, h - 10 - cornerSize); c.stroke();
+      // bottom-right
+      c.beginPath(); c.moveTo(w - 10, h - 10); c.lineTo(w - 10 - cornerSize, h - 10); c.moveTo(w - 10, h - 10); c.lineTo(w - 10, h - 10 - cornerSize); c.stroke();
+      
+      // Symmetrical Skyscraper blocks (drawn as structured grid squares)
+      c.fillStyle = 'rgba(130, 255, 207, 0.08)';
+      c.strokeStyle = 'rgba(130, 255, 207, 0.25)';
+      c.lineWidth = 1;
+      
+      // Left blocks
+      c.fillRect(40, 25, 45, 35); c.strokeRect(40, 25, 45, 35);
+      c.fillRect(40, 72, 45, 35); c.strokeRect(40, 72, 45, 35);
+      c.fillRect(40, 120, 45, 35); c.strokeRect(40, 120, 45, 35);
+      
+      // Right blocks
+      c.fillRect(w - 85, 25, 45, 35); c.strokeRect(w - 85, 25, 45, 35);
+      c.fillRect(w - 85, 72, 45, 35); c.strokeRect(w - 85, 72, 45, 35);
+      c.fillRect(w - 85, 120, 45, 35); c.strokeRect(w - 85, 120, 45, 35);
+      
+      // Center roads lanes
+      c.strokeStyle = 'rgba(130, 255, 207, 0.12)';
+      c.beginPath();
+      // Vertical central road
+      c.moveTo(140, 10); c.lineTo(140, h - 10);
+      // Horizontal central road
+      c.moveTo(15, 90); c.lineTo(w - 15, 90);
+      c.stroke();
+      
+      // Symmetrical launch ramps (wedges pointing inward to center 140, 90)
+      c.fillStyle = 'rgba(130, 255, 207, 0.7)';
+      c.strokeStyle = '#82ffcf';
+      c.lineWidth = 1;
+      
+      // West ramp (points East)
+      c.beginPath();
+      c.moveTo(95, 83); c.lineTo(110, 90); c.lineTo(95, 97); c.closePath();
+      c.fill(); c.stroke();
+      
+      // East ramp (points West)
+      c.beginPath();
+      c.moveTo(185, 83); c.lineTo(170, 90); c.lineTo(185, 97); c.closePath();
+      c.fill(); c.stroke();
+      
+      // North ramp (points South)
+      c.beginPath();
+      c.moveTo(133, 50); c.lineTo(140, 65); c.lineTo(147, 50); c.closePath();
+      c.fill(); c.stroke();
+      
+      // South ramp (points North)
+      c.beginPath();
+      c.moveTo(133, 130); c.lineTo(140, 115); c.lineTo(147, 130); c.closePath();
+      c.fill(); c.stroke();
+      
+      // Overlay Tech Labels
+      c.fillStyle = '#82ffcf';
+      c.font = '700 8px monospace';
+      c.fillText('GRID SIM: ACTIVE', 25, 22);
+      c.fillText('SYS: CITY_MAYHEM', 25, 32);
+      c.fillText('SCALE: 1:2.4KM', 190, 160);
+      
+    } else if (mapId === 'basin') {
+      // --- Doom Basin Blueprint ---
+      // Outer circular wasteland boundary
+      c.strokeStyle = 'rgba(255, 101, 0, 0.35)';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.arc(140, 90, 78, 0, Math.PI * 2);
+      c.stroke();
+      
+      // Radial ring loops
+      c.strokeStyle = 'rgba(255, 101, 0, 0.12)';
+      c.beginPath();
+      c.arc(140, 90, 60, 0, Math.PI * 2);
+      c.arc(140, 90, 42, 0, Math.PI * 2);
+      c.stroke();
+      
+      // Corners crosshairs/indicators
+      c.strokeStyle = 'rgba(255, 101, 0, 0.5)';
+      c.lineWidth = 1;
+      const cornerSize = 8;
+      // top-left
+      c.beginPath(); c.moveTo(10, 10); c.lineTo(10 + cornerSize, 10); c.moveTo(10, 10); c.lineTo(10, 10 + cornerSize); c.stroke();
+      // top-right
+      c.beginPath(); c.moveTo(w - 10, 10); c.lineTo(w - 10 - cornerSize, 10); c.moveTo(w - 10, 10); c.lineTo(w - 10, 10 + cornerSize); c.stroke();
+      // bottom-left
+      c.beginPath(); c.moveTo(10, h - 10); c.lineTo(10 + cornerSize, h - 10); c.moveTo(10, h - 10); c.lineTo(10, h - 10 - cornerSize); c.stroke();
+      // bottom-right
+      c.beginPath(); c.moveTo(w - 10, h - 10); c.lineTo(w - 10 - cornerSize, h - 10); c.moveTo(w - 10, h - 10); c.lineTo(w - 10, h - 10 - cornerSize); c.stroke();
+
+      // Central Magma Pit boiling effect
+      const grad = c.createRadialGradient(140, 90, 5, 140, 90, 26);
+      grad.addColorStop(0, 'rgba(255, 60, 0, 0.7)');
+      grad.addColorStop(0.5, 'rgba(255, 101, 0, 0.3)');
+      grad.addColorStop(1, 'rgba(255, 30, 0, 0)');
+      c.fillStyle = grad;
+      c.beginPath();
+      c.arc(140, 90, 26, 0, Math.PI * 2);
+      c.fill();
+      
+      c.strokeStyle = 'rgba(255, 60, 0, 0.4)';
+      c.beginPath();
+      c.arc(140, 90, 26, 0, Math.PI * 2);
+      c.stroke();
+      
+      // Giant central ramps pointing North/South into the pit
+      c.fillStyle = 'rgba(255, 101, 0, 0.75)';
+      c.strokeStyle = '#ff6500';
+      c.lineWidth = 1;
+      
+      // South-to-center ramp (points North)
+      c.beginPath();
+      c.moveTo(133, 62); c.lineTo(140, 48); c.lineTo(147, 62); c.closePath();
+      c.fill(); c.stroke();
+      
+      // North-to-center ramp (points South)
+      c.beginPath();
+      c.moveTo(133, 118); c.lineTo(140, 132); c.lineTo(147, 118); c.closePath();
+      c.fill(); c.stroke();
+      
+      // Corner pylons (desolate pillars)
+      c.fillStyle = 'rgba(255, 101, 0, 0.1)';
+      c.strokeStyle = 'rgba(255, 101, 0, 0.25)';
+      const pylons = [[85, 45], [195, 45], [85, 135], [195, 135]];
+      pylons.forEach(([px, py]) => {
+        c.beginPath();
+        c.arc(px, py, 6, 0, Math.PI * 2);
+        c.fill(); c.stroke();
+      });
+      
+      // Overlay Tech Labels
+      c.fillStyle = '#ff6500';
+      c.font = '700 8px monospace';
+      c.fillText('ZONE: CRATER_DEPR', 25, 22);
+      c.fillText('THERMAL: DANGER', 25, 32);
+      c.fillText('SCALE: 1:3.2KM', 190, 160);
+      
+    } else if (mapId === 'outpost') {
+      // --- Neon Outpost Blueprint ---
+      // Cropped corner boundary outline (Octagon style for futuristic lab look)
+      c.strokeStyle = 'rgba(0, 240, 255, 0.35)';
+      c.lineWidth = 1.5;
+      c.beginPath();
+      c.moveTo(35, 10);
+      c.lineTo(w - 35, 10);
+      c.lineTo(w - 15, 30);
+      c.lineTo(w - 15, h - 30);
+      c.lineTo(w - 35, h - 10);
+      c.lineTo(35, h - 10);
+      c.lineTo(15, h - 30);
+      c.lineTo(15, 30);
+      c.closePath();
+      c.stroke();
+      
+      // Corner crosshairs/indicators
+      c.strokeStyle = 'rgba(0, 240, 255, 0.5)';
+      c.lineWidth = 1;
+      const cornerSize = 8;
+      // top-left
+      c.beginPath(); c.moveTo(10, 10); c.lineTo(10 + cornerSize, 10); c.moveTo(10, 10); c.lineTo(10, 10 + cornerSize); c.stroke();
+      // top-right
+      c.beginPath(); c.moveTo(w - 10, 10); c.lineTo(w - 10 - cornerSize, 10); c.moveTo(w - 10, 10); c.lineTo(w - 10, 10 + cornerSize); c.stroke();
+      // bottom-left
+      c.beginPath(); c.moveTo(10, h - 10); c.lineTo(10 + cornerSize, h - 10); c.moveTo(10, h - 10); c.lineTo(10, h - 10 - cornerSize); c.stroke();
+      // bottom-right
+      c.beginPath(); c.moveTo(w - 10, h - 10); c.lineTo(w - 10 - cornerSize, h - 10); c.moveTo(w - 10, h - 10); c.lineTo(w - 10, h - 10 - cornerSize); c.stroke();
+      
+      // Symmetrical cross lanes/roads
+      c.strokeStyle = 'rgba(0, 240, 255, 0.12)';
+      c.beginPath();
+      c.moveTo(15, 90); c.lineTo(w - 15, 90);
+      c.moveTo(140, 10); c.lineTo(140, h - 10);
+      c.stroke();
+      
+      // High-voltage reactor cores (emissive cylinder shadows)
+      c.fillStyle = 'rgba(0, 255, 204, 0.08)';
+      c.strokeStyle = 'rgba(0, 255, 204, 0.3)';
+      const cores = [[140, 90], [70, 90], [210, 90], [140, 45], [140, 135]];
+      cores.forEach(([cx, cy], index) => {
+        // Draw concentric glowing reactor structures
+        c.beginPath();
+        c.arc(cx, cy, index === 0 ? 12 : 8, 0, Math.PI * 2);
+        c.fill(); c.stroke();
+        
+        c.beginPath();
+        c.arc(cx, cy, index === 0 ? 6 : 4, 0, Math.PI * 2);
+        c.stroke();
+      });
+      
+      // Turbo grid tiles (chevrons drawn as high-speed vectors)
+      c.strokeStyle = 'rgba(0, 255, 204, 0.4)';
+      c.lineWidth = 1;
+      const chevrons = [
+        [100, 90], [110, 90], [120, 90], // pointing right ->
+        [180, 90], [170, 90], [160, 90], // pointing left <-
+      ];
+      chevrons.forEach(([cx, cy]) => {
+        c.beginPath();
+        if (cx < 140) {
+          c.moveTo(cx - 3, cy - 4); c.lineTo(cx + 1, cy); c.lineTo(cx - 3, cy + 4);
+        } else {
+          c.moveTo(cx + 3, cy - 4); c.lineTo(cx - 1, cy); c.lineTo(cx + 3, cy + 4);
+        }
+        c.stroke();
+      });
+      
+      // Angle launching ramps bridging reactor walls
+      c.fillStyle = 'rgba(255, 43, 214, 0.75)';
+      c.strokeStyle = '#ff2bd6';
+      c.lineWidth = 1;
+      
+      // Top-left diagonal ramp pointing South-East
+      c.beginPath();
+      c.moveTo(85, 52); c.lineTo(98, 65); c.lineTo(89, 74); c.closePath();
+      c.fill(); c.stroke();
+      
+      // Bottom-right diagonal ramp pointing North-West
+      c.beginPath();
+      c.moveTo(195, 128); c.lineTo(182, 115); c.lineTo(191, 106); c.closePath();
+      c.fill(); c.stroke();
+      
+      // Overlay Tech Labels
+      c.fillStyle = '#00f0ff';
+      c.font = '700 8px monospace';
+      c.fillText('GRID: ULTRA_CHARGED', 25, 22);
+      c.fillText('OUTPOST: ENERGIZED', 25, 32);
+      c.fillText('SCALE: 1:1.9KM', 190, 160);
+    }
+  });
+}
+
+function animateRadars() {
+  requestAnimationFrame(animateRadars);
+  
+  if (activeSetupStep !== 'game' || ui.matchMenu.classList.contains('hidden')) {
+    return;
+  }
+  
+  radarAngle = (radarAngle + 0.024) % (Math.PI * 2);
+  
+  const mapIds = ['city', 'basin', 'outpost'];
+  mapIds.forEach((mapId) => {
+    const canvasEl = document.querySelector(`.map-radar-canvas[data-canvas-radar="${mapId}"]`);
+    if (!canvasEl) return;
+    const c = canvasEl.getContext('2d');
+    const w = canvasEl.width;
+    const h = canvasEl.height;
+    
+    c.clearRect(0, 0, w, h);
+    
+    // Draw sweep trail lines
+    c.lineWidth = 1.2;
+    for (let i = 0; i < 35; i++) {
+      const angle = radarAngle - i * 0.012;
+      const alpha = (1 - i / 35) * 0.12;
+      c.strokeStyle = mapId === 'city' ? `rgba(130, 255, 207, ${alpha})` :
+                      mapId === 'basin' ? `rgba(255, 101, 0, ${alpha})` :
+                      `rgba(0, 240, 255, ${alpha})`;
+      c.beginPath();
+      c.moveTo(140, 90);
+      c.lineTo(140 + Math.cos(angle) * 125, 90 + Math.sin(angle) * 125);
+      c.stroke();
+    }
+    
+    // Draw main sweep hand
+    c.lineWidth = 2.0;
+    c.strokeStyle = mapId === 'city' ? 'rgba(130, 255, 207, 0.85)' :
+                    mapId === 'basin' ? 'rgba(255, 101, 0, 0.85)' :
+                    'rgba(0, 240, 255, 0.85)';
+    c.beginPath();
+    c.moveTo(140, 90);
+    c.lineTo(140 + Math.cos(radarAngle) * 125, 90 + Math.sin(radarAngle) * 125);
+    c.stroke();
+    
+    // Draw center blip representing radar core
+    c.fillStyle = mapId === 'city' ? 'rgba(130, 255, 207, 0.9)' :
+                  mapId === 'basin' ? 'rgba(255, 101, 0, 0.9)' :
+                  'rgba(0, 240, 255, 0.9)';
+    c.beginPath();
+    c.arc(140, 90, 2.5, 0, Math.PI * 2);
+    c.fill();
+    
+    // Threat blips updating
+    const blips = radarBlips[mapId];
+    blips.forEach(blip => {
+      let diff = radarAngle - blip.angle;
+      if (diff < 0) diff += Math.PI * 2;
+      
+      if (diff >= 0 && diff < 0.08) {
+        blip.lastIntensity = 1.0;
+      } else {
+        blip.lastIntensity = Math.max(0, blip.lastIntensity - 0.0075);
+      }
+      
+      if (blip.lastIntensity > 0) {
+        // Outer glowing ring
+        c.fillStyle = `rgba(255, 30, 30, ${blip.lastIntensity * 0.35})`;
+        c.beginPath();
+        c.arc(blip.x, blip.y, 6.5, 0, Math.PI * 2);
+        c.fill();
+        
+        // Inner hot core
+        c.fillStyle = `rgba(255, 60, 60, ${blip.lastIntensity})`;
+        c.beginPath();
+        c.arc(blip.x, blip.y, 2.5, 0, Math.PI * 2);
+        c.fill();
+        
+        // Threat flag text
+        c.fillStyle = `rgba(255, 60, 60, ${blip.lastIntensity * 0.85})`;
+        c.font = '700 6px monospace';
+        c.fillText('ACTV', blip.x + 5, blip.y - 3);
+      }
+    });
+  });
+}
+
+rebuildGameMap(selectedMapId);
+drawMapBlueprints();
+animateRadars();
 routeRecorder = createRouteRecorder(ctx, document.querySelector('#recordRouteButton'));
-createPickups(ctx, physics);
 
 function esc(value) {
   return String(value)
@@ -751,6 +1759,30 @@ function renderSetupStep(step = activeSetupStep) {
   ui.matchMenu?.classList.toggle('vehicle-mode', step === 'vehicle');
   ui.matchMenu?.classList.toggle('game-mode', step === 'game');
   ui.matchMenu?.classList.toggle('shop-mode', step === 'shop');
+
+  if (step === 'game') {
+    // Sync kill limit button highlights
+    document.querySelectorAll('[data-kill-limit]').forEach((b) => {
+      b.classList.toggle('selected', Number(b.dataset.killLimit) === gameSetupKillLimit);
+    });
+    // Sync team kill limit button highlights
+    document.querySelectorAll('[data-team-kill-limit]').forEach((b) => {
+      b.classList.toggle('selected', Number(b.dataset.teamKillLimit) === gameSetupTeamKillLimit);
+    });
+    // Sync map tab buttons
+    document.querySelectorAll('.map-tab-btn').forEach((b) => {
+      const isSelected = b.dataset.mapId === selectedMapId;
+      b.classList.toggle('selected', isSelected);
+      b.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+    });
+    // Sync map detail panels
+    document.querySelectorAll('.map-detail-panel').forEach((p) => {
+      p.classList.toggle('selected', p.dataset.detailMap === selectedMapId);
+    });
+  } else if (step === 'team') {
+    renderTeamBuilder();
+  }
+
   refreshQuickTips();
 }
 
@@ -1348,6 +2380,7 @@ function compressImageFileForStorage(file, maxSize = 512, quality = 0.78) {
 
 function beginMatch() {
   recordGarageTemplateUse();
+  rebuildGameMap(selectedMapId);
   startMatch(ctx, materials, readMatchOptions(), physics);
   ui.matchMenu.classList.add('hidden');
   ui.resultsOverlay.classList.remove('visible');
@@ -1523,6 +2556,29 @@ document.querySelector('.team-kill-limit-options')?.addEventListener('click', (e
   if (!btn) return;
   gameSetupTeamKillLimit = Number(btn.dataset.teamKillLimit);
   document.querySelectorAll('[data-team-kill-limit]').forEach((b) => b.classList.toggle('selected', Number(b.dataset.teamKillLimit) === gameSetupTeamKillLimit));
+});
+
+// Game Setup — Map Selection Tabs click listener
+document.querySelector('.map-tab-list')?.addEventListener('click', (event) => {
+  const btn = event.target.closest('.map-tab-btn');
+  if (!btn) return;
+  const mapId = btn.dataset.mapId;
+  if (!mapId) return;
+  selectedMapId = mapId;
+  
+  // Toggle selected active tabs
+  document.querySelectorAll('.map-tab-btn').forEach((b) => {
+    const isSelected = b.dataset.mapId === selectedMapId;
+    b.classList.toggle('selected', isSelected);
+    b.setAttribute('aria-selected', isSelected ? 'true' : 'false');
+  });
+
+  // Toggle selected active panels
+  document.querySelectorAll('.map-detail-panel').forEach((p) => {
+    p.classList.toggle('selected', p.dataset.detailMap === selectedMapId);
+  });
+  
+  rebuildGameMap(selectedMapId);
 });
 
 function togglePauseMenu(show) {
@@ -1793,6 +2849,10 @@ function updateCamera(dt) {
   if (!ctx.player) {
     ctx.camera.position.lerp(cameraMenuPosition, Math.min(1, dt * 2));
     ctx.camera.lookAt(0, 0, 0);
+    if (ctx.camera.fov !== 65) {
+      ctx.camera.fov = 65;
+      ctx.camera.updateProjectionMatrix();
+    }
     return;
   }
   if (!ctx.cameraBasePos) ctx.cameraBasePos = ctx.camera.position.clone();
@@ -1815,11 +2875,18 @@ function updateCamera(dt) {
   cameraLookAt.copy(carPosition).addScaledVector(cameraForward, rearView ? -8 : 8);
   cameraLookAt.y += 1.4;
   ctx.camera.lookAt(cameraLookAt);
+
+  // Dynamic Camera FOV Speed Warping (Tunnel Vision Effect)
+  const baseFov = 65;
+  const speed = Math.abs(ctx.player.velocity.speed);
+  const flyHeight = Math.max(0, (ctx.player.transform.y || 0));
+  const targetFov = baseFov + Math.min(25, (speed / 140) * 16 + flyHeight * 0.9);
+  ctx.camera.fov = THREE.MathUtils.lerp(ctx.camera.fov, targetFov, Math.min(1, dt * 6.0));
+  ctx.camera.updateProjectionMatrix();
 }
 
 let lastFrameTime = performance.now();
 function animate() {
-  ctx.stats.begin();
   const now = performance.now();
   const dt = Math.min((now - lastFrameTime) / 1000, 0.033);
   lastFrameTime = now;
@@ -1833,6 +2900,17 @@ function animate() {
     updateDamageVisuals(ctx, dt);
     updateMatch(ctx, dt);
   }
+
+  // Blinking skyscraper warning beacons animation
+  if (ctx.beacons) {
+    ctx.beacons.forEach((b) => {
+      b.timer += dt * 4.0;
+      const intensity = Math.sin(b.timer) * 0.5 + 0.5;
+      b.mesh.material.color.setRGB(intensity, 0, 0);
+      b.light.intensity = intensity * 2.8;
+    });
+  }
+
   routeRecorder.update(dt);
   effects.update(dt);
   updateGaragePreview(dt);
@@ -1848,7 +2926,6 @@ function animate() {
   updateHUD(ctx, ui, dt);
   drawMinimap(ctx, ui, dt);
   ctx.composer.render();
-  ctx.stats.end();
   requestAnimationFrame(animate);
 }
 

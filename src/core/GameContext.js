@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { World as ECSWorld } from '@miniplex/core';
-import Stats from 'stats.js';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
@@ -14,7 +13,7 @@ export function createGameContext(canvas) {
   renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
   renderer.setSize(window.innerWidth, window.innerHeight);
   renderer.shadowMap.enabled = true;
-  renderer.shadowMap.type = THREE.PCFShadowMap;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.toneMappingExposure = 1.12;
 
@@ -30,9 +29,7 @@ export function createGameContext(canvas) {
   composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.2, 0.45, 0.78));
   composer.addPass(new OutputPass());
 
-  const stats = new Stats();
-  stats.dom.classList.add('stats');
-  document.body.appendChild(stats.dom);
+
 
   const ecs = new ECSWorld();
   const raycaster = new THREE.Raycaster();
@@ -44,7 +41,6 @@ export function createGameContext(canvas) {
     scene,
     camera,
     composer,
-    stats,
     ecs,
     raycaster,
     mouse,

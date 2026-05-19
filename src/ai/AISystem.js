@@ -63,6 +63,23 @@ export function probeVehiclePath(ctx, entity) {
   const yaw = entity.transform.yaw;
   const forward = forwardFromYaw(yaw);
   const right = { x: Math.cos(yaw), z: -Math.sin(yaw) };
+  const carY = entity.transform.y || 0;
+  const filteredShapes = ctx.collisionShapes.filter((shape) => {
+    let obstacleHeight = shape.height !== undefined && shape.height > 0 ? shape.height : 0;
+    if (obstacleHeight === 0) {
+      if (shape.type === 'wall' || shape.type === 'building') {
+        obstacleHeight = 35; // Tall obstacles/boundaries
+      } else if (shape.type === 'barrier') {
+        obstacleHeight = 0.6;
+      } else if (shape.type === 'crate') {
+        obstacleHeight = 1.8;
+      } else if (shape.type === 'parked-car') {
+        obstacleHeight = 1.3;
+      }
+    }
+    return carY < obstacleHeight;
+  });
+
   const probes = [
     { key: 'front', lateral: 0, distance: 5.5, width: 2.2, depth: 6.3 },
     { key: 'left', lateral: -2.9, distance: 4.7, width: 1.9, depth: 5.1 },
@@ -71,7 +88,7 @@ export function probeVehiclePath(ctx, entity) {
     const x = entity.transform.x + forward.x * probe.distance + right.x * probe.lateral;
     const z = entity.transform.z + forward.z * probe.distance + right.z * probe.lateral;
     const obb = makeObb(x, z, probe.width, probe.depth, yaw);
-    const worldHit = findObbCollision(obb, ctx.collisionShapes);
+    const worldHit = findObbCollision(obb, filteredShapes);
     const vehicleHit = ctx.ecs.entities.find((other) => other !== entity && other.vehicle && !other.health.dead && distance2D(other.transform, { x, z }) < 4.1);
     return { ...probe, x, z, hit: worldHit || (vehicleHit ? { normal: { x: -forward.x, z: -forward.z }, shape: { type: 'vehicle', id: vehicleHit.id } } : null) };
   });

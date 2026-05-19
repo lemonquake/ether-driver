@@ -113,7 +113,7 @@ function esc(value) {
 
 function renderScoreRows(rows) {
   return rows.map((row) => `
-    <div class="scoreboard-grid" style="--team-color:${esc(row.teamColor)}">
+    <div class="scoreboard-grid ${row.isPlayer ? 'is-player' : ''}" style="--team-color:${esc(row.teamColor)}">
       <span>${esc(row.name)}</span>
       <span style="color:${esc(row.teamColor)}">${esc(row.team)}</span>
       <span>${row.kills}</span>
@@ -262,8 +262,9 @@ function renderPostMatchLeaderboard(ctx, ui, rows) {
           const turbo = s.specialFloorUses?.turbo || 0;
           const jump = s.specialFloorUses?.jump || 0;
           const isMvp = mvp && entity.displayName === mvp.name && entity.teamId === mvp.teamId;
+          const isPlayer = entity === ctx.player;
           return `
-            <div class="results-table-row ${isMvp ? 'is-mvp' : ''}">
+            <div class="results-table-row ${isMvp ? 'is-mvp' : ''} ${isPlayer ? 'is-player' : ''}">
               <span class="results-player-name">${isMvp ? '★ ' : ''}${esc(entity.displayName || entity.vehicle.name)}</span>
               <span>${s.kills || 0}</span>
               <span>${s.deaths || 0}</span>
@@ -273,7 +274,7 @@ function renderPostMatchLeaderboard(ctx, ui, rows) {
               <span>${turbo}</span>
               <span>${jump}</span>
             </div>
-            <div class="results-weapon-row">
+            <div class="results-weapon-row ${isPlayer ? 'is-player' : ''}">
               <span class="results-weapon-label">Weapon Damage:</span>
               <span class="results-weapon-chips">${renderWeaponDamageChips(s.weaponDamage)}</span>
             </div>
@@ -377,6 +378,7 @@ function renderDetailedBreakdown(ctx, entities) {
     const name = entity.displayName || entity.vehicle?.name || '?';
     const teamColor = entity.teamColor || '#82ffcf';
     const teamId = entity.teamId;
+    const isPlayer = entity === ctx.player;
 
     // Kills made by this player
     const killsMade = killLog.filter((k) => k.killerName === name && k.killerTeamId === teamId);
@@ -417,7 +419,7 @@ function renderDetailedBreakdown(ctx, entities) {
     };
 
     return `
-      <div class="detail-player" style="--team-color:${esc(teamColor)}">
+      <div class="detail-player ${isPlayer ? 'is-player' : ''}" style="--team-color:${esc(teamColor)}">
         <header class="detail-player-header">
           <strong style="color:${esc(teamColor)}">${esc(name)}</strong>
           <span>${killsMade.length} Kills · ${deathsSuffered.length} Deaths</span>
@@ -685,6 +687,7 @@ function damageColor(damageType) {
   if (damageType === 'fire') return '#ff5f3d';
   if (damageType === 'plasma') return '#82ffcf';
   if (damageType === 'shock') return '#7df9ff';
+  if (damageType === 'chemical' || damageType === 'toxic' || damageType === 'acid') return '#55ff55';
   return '#ffcc66';
 }
 

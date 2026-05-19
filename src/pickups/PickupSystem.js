@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { distance2D } from '../core/collision.js';
 import { weaponCatalog } from '../data/weapons.js';
+import { applyTurretEnhancementVisual } from '../vehicles/VehicleFactory.js';
 
 function createPickupLabel(text, colorHex) {
   const canvas = document.createElement('canvas');
@@ -204,11 +205,47 @@ export function updatePickups(ctx, dt) {
         if (vehicle.score) vehicle.score.weaponsPickedUp = (vehicle.score.weaponsPickedUp || 0) + 1;
         break;
       } else {
+        const catalogWeapon = weaponCatalog[pickup.pickup.weaponId];
+
+        // Intercept turret slot pickups (temp turret enhancements)
+        if (catalogWeapon && catalogWeapon.slot === 'turret') {
+          vehicle.weaponSlots.turret = {
+            weaponId: pickup.pickup.weaponId,
+            ammoInMagazine: 30,
+            magazineSize: 30,
+            reserveAmmo: 60,
+            reloadTime: 1.0,
+            cooldown: 0,
+            reloadRemaining: 0,
+            isReloading: false
+          };
+
+          let visualStyle = 'coil';
+          if (pickup.pickup.weaponId === 'turret-hyper-plasma') visualStyle = 'coil';
+          else if (pickup.pickup.weaponId === 'turret-rail-slugger') visualStyle = 'rail';
+          else if (pickup.pickup.weaponId === 'turret-shock-beam') visualStyle = 'needle';
+          else if (pickup.pickup.weaponId === 'turret-magma-spitter') visualStyle = 'mortar';
+          else if (pickup.pickup.weaponId === 'turret-flak-barrage') visualStyle = 'drum';
+
+          const colorHex = catalogWeapon.color || 0x00f0ff;
+          applyTurretEnhancementVisual(vehicle, visualStyle, colorHex, ctx);
+
+          if (vehicle === ctx.player && ctx.match?.killBannerQueue) {
+             ctx.match.killBannerQueue.push({
+               line: `UPGRADED TURRET: ${catalogWeapon.name.toUpperCase()}`,
+               color: `#${colorHex.toString(16).padStart(6, '0')}`
+             });
+          }
+
+          pickup.pickup.respawn = 10;
+          if (vehicle.score) vehicle.score.weaponsPickedUp = (vehicle.score.weaponsPickedUp || 0) + 1;
+          break;
+        }
+
         // Max 2 special weapons — skip if already full
         if (countSpecialWeapons(vehicle) >= 2) continue;
         const slotName = findEmptySpecialSlot(vehicle);
         if (!slotName) continue;
-        const catalogWeapon = weaponCatalog[pickup.pickup.weaponId];
         vehicle.weaponSlots[slotName] = {
           weaponId: pickup.pickup.weaponId,
           ammo: catalogWeapon ? catalogWeapon.ammo : 4,
@@ -222,5 +259,13 @@ export function updatePickups(ctx, dt) {
         break;
       }
     }
+  }
+}
+
+export function clearPickups(ctx, physics) {
+  for (const entity of [...ctx.ecs.entities.filter((e) => e.pickup)]) {
+    if (entity.renderable?.group) ctx.scene.remove(entity.renderable.group);
+    if (entity.rapierBody && physics) physics.remove(entity.rapierBody);
+    ctx.ecs.remove(entity);
   }
 }

@@ -290,31 +290,244 @@
                 <button id="startMatchButton" type="button" class="primary next-step-cta"><span>Start Match</span></button>
               </div>
             </header>
-            <div class="game-setup-grid">
-              <fieldset class="game-setup-field">
-                <legend>Kill Limit <small>(First player to reach X kills)</small></legend>
-                <div class="kill-limit-options" role="group" aria-label="Kill limit">
-                  <button type="button" data-kill-limit="0" class="selected">None</button>
-                  <button type="button" data-kill-limit="5">5</button>
-                  <button type="button" data-kill-limit="10">10</button>
-                  <button type="button" data-kill-limit="15">15</button>
-                  <button type="button" data-kill-limit="20">20</button>
-                  <button type="button" data-kill-limit="25">25</button>
-                  <button type="button" data-kill-limit="50">50</button>
+
+            <div class="game-setup-dashboard">
+              <!-- Left Column: Win Conditions & Options -->
+              <div class="game-setup-panel win-conditions-panel">
+                <h3 class="setup-subtitle">// MATCH PARAMETERS & WIN CONDITIONS</h3>
+                
+                <fieldset class="game-setup-field">
+                  <legend>Kill Limit <small>(First driver to reach X kills)</small></legend>
+                  <div class="kill-limit-options" role="group" aria-label="Kill limit">
+                    <button type="button" data-kill-limit="0" class="selected">None</button>
+                    <button type="button" data-kill-limit="5">5</button>
+                    <button type="button" data-kill-limit="10">10</button>
+                    <button type="button" data-kill-limit="15">15</button>
+                    <button type="button" data-kill-limit="20">20</button>
+                    <button type="button" data-kill-limit="25">25</button>
+                    <button type="button" data-kill-limit="50">50</button>
+                  </div>
+                </fieldset>
+                
+                <fieldset class="game-setup-field">
+                  <legend>Team Kill Limit <small>(First team to reach X total kills)</small></legend>
+                  <div class="team-kill-limit-options" role="group" aria-label="Team kill limit">
+                    <button type="button" data-team-kill-limit="0" class="selected">None</button>
+                    <button type="button" data-team-kill-limit="10">10</button>
+                    <button type="button" data-team-kill-limit="20">20</button>
+                    <button type="button" data-team-kill-limit="30">30</button>
+                    <button type="button" data-team-kill-limit="50">50</button>
+                    <button type="button" data-team-kill-limit="75">75</button>
+                    <button type="button" data-team-kill-limit="100">100</button>
+                  </div>
+                </fieldset>
+
+                <div class="setup-tactical-hud">
+                  <div class="hud-scanning-line"></div>
+                  <span class="hud-ticker-label">TACTICAL FEED: MATCH RULE MATRIX</span>
+                  <p id="matchRulesExplanation" class="hud-ticker-text">ARENA COMBAT COMMENCES UNDER REGULATED WIN SPECIFICATIONS. EXCEEDING THE ENGAGEMENT LIMIT INITIATES AUTOMATIC SECTOR DECLASSIFICATION AND IMMEDIATE MATCH SUSPENSION.</p>
                 </div>
-              </fieldset>
-              <fieldset class="game-setup-field">
-                <legend>Team Kill Limit <small>(First team to reach X total kills)</small></legend>
-                <div class="team-kill-limit-options" role="group" aria-label="Team kill limit">
-                  <button type="button" data-team-kill-limit="0" class="selected">None</button>
-                  <button type="button" data-team-kill-limit="10">10</button>
-                  <button type="button" data-team-kill-limit="20">20</button>
-                  <button type="button" data-team-kill-limit="30">30</button>
-                  <button type="button" data-team-kill-limit="50">50</button>
-                  <button type="button" data-team-kill-limit="75">75</button>
-                  <button type="button" data-team-kill-limit="100">100</button>
+              </div>
+
+              <!-- Right Column: Interactive Map Selection -->
+              <div class="game-setup-panel map-selection-panel">
+                <h3 class="setup-subtitle">// SELECT THEATER OF OPERATIONS</h3>
+                
+                <div class="map-tab-list" role="tablist" aria-label="Select Theater of Operations">
+                  <button type="button" class="map-tab-btn selected" data-map-id="city" role="tab" aria-selected="true" aria-controls="map-panel-city">
+                    <span class="tab-kicker">SECTOR 01: URBAN</span>
+                    <b>Megalopolis Mayhem</b>
+                  </button>
+                  <button type="button" class="map-tab-btn" data-map-id="basin" role="tab" aria-selected="false" aria-controls="map-panel-basin">
+                    <span class="tab-kicker">SECTOR 02: THERMAL</span>
+                    <b>Doom Basin</b>
+                  </button>
+                  <button type="button" class="map-tab-btn" data-map-id="outpost" role="tab" aria-selected="false" aria-controls="map-panel-outpost">
+                    <span class="tab-kicker">SECTOR 03: CYBER</span>
+                    <b>Neon Outpost</b>
+                  </button>
+                  <button type="button" class="map-tab-btn" data-map-id="military" role="tab" aria-selected="false" aria-controls="map-panel-military">
+                    <span class="tab-kicker">SECTOR 04: TACTICAL</span>
+                    <b>Military Base</b>
+                  </button>
+                  <button type="button" class="map-tab-btn" data-map-id="hangar" role="tab" aria-selected="false" aria-controls="map-panel-hangar">
+                    <span class="tab-kicker">SECTOR 05: ELEVATED</span>
+                    <b>Elevated Hangar</b>
+                  </button>
                 </div>
-              </fieldset>
+
+                <div class="map-detail-panels">
+                  <!-- Megalopolis Mayhem Panel -->
+                  <div class="map-detail-panel selected" id="map-panel-city" data-detail-map="city" role="tabpanel">
+                    <div class="map-detail-visuals">
+                      <img class="map-showcase-img" src="/textures/map_city.png" alt="Megalopolis Mayhem Showcase" />
+                    </div>
+                    <div class="map-detail-text">
+                      <div class="map-detail-header">
+                        <h4>Megalopolis Mayhem</h4>
+                        <span class="map-detail-sector">SECTOR: ACTIVE</span>
+                      </div>
+                      <p class="map-detail-tagline">High-Density Concrete Block Grids</p>
+                      <p class="map-detail-desc">Welcome to the neon-drenched concrete jungle where heavy metal meets heavy wreckage! Symmetrical grid-locked skyscraper blocks, loops, and 4 massive concrete launch ramps. Perfect for mayhem.</p>
+                      
+                      <div class="map-spec-grid">
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Terrain Base</span>
+                          <span class="map-spec-value">Reinforced Asphalt</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Gravity Rating</span>
+                          <span class="map-spec-value">1.0G (Standard)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Thermal Hazards</span>
+                          <span class="map-spec-value">None Detected</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Special Features</span>
+                          <span class="map-spec-value">4x Inward Jump Ramps</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Doom Basin Panel -->
+                  <div class="map-detail-panel" id="map-panel-basin" data-detail-map="basin" role="tabpanel">
+                    <div class="map-detail-visuals">
+                      <img class="map-showcase-img" src="/textures/map_basin.png" alt="Doom Basin Showcase" />
+                    </div>
+                    <div class="map-detail-text">
+                      <div class="map-detail-header">
+                        <h4>Doom Basin</h4>
+                        <span class="map-detail-sector danger">SECTOR: THERMAL LIMIT</span>
+                      </div>
+                      <p class="map-detail-tagline">Industrial Slag Crater & Perimeter Ring-Roads</p>
+                      <p class="map-detail-desc">A desolate industrial wasteland crater packed with elevated perimeter loops and giant dual jumping ramps that launch vehicles directly across the central boiling magma pit. Watch your slides!</p>
+                      
+                      <div class="map-spec-grid">
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Terrain Base</span>
+                          <span class="map-spec-value warning">Desert Wasteland</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Gravity Rating</span>
+                          <span class="map-spec-value">1.0G (Standard)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Thermal Hazards</span>
+                          <span class="map-spec-value danger">Boiling Magma Pit</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Special Features</span>
+                          <span class="map-spec-value warning">Center Jump Vaults</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Neon Outpost Panel -->
+                  <div class="map-detail-panel" id="map-panel-outpost" data-detail-map="outpost" role="tabpanel">
+                    <div class="map-detail-visuals">
+                      <img class="map-showcase-img" src="/textures/map_outpost.png" alt="Neon Outpost Showcase" />
+                    </div>
+                    <div class="map-detail-text">
+                      <div class="map-detail-header">
+                        <h4>Neon Outpost</h4>
+                        <span class="map-detail-sector warning">SECTOR: STAGED</span>
+                      </div>
+                      <p class="map-detail-tagline">Laboratory Zoning & Hyper-Speed Turbo Grids</p>
+                      <p class="map-detail-desc">A futuristic laboratory sector with high-voltage reactor coils, barricade grids, intensive turbo-tile patterns, hyper-speed jump grids, and narrow channels. Maximum arcing and high speed!</p>
+                      
+                      <div class="map-spec-grid">
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Terrain Base</span>
+                          <span class="map-spec-value">Dark Cyber Metal</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Gravity Rating</span>
+                          <span class="map-spec-value">1.0G (Standard)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Thermal Hazards</span>
+                          <span class="map-spec-value warning">None (Electrical Arc)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Special Features</span>
+                          <span class="map-spec-value">Intense Turbo Grid Array</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Hightech Military Base Panel -->
+                  <div class="map-detail-panel" id="map-panel-military" data-detail-map="military" role="tabpanel">
+                    <div class="map-detail-visuals">
+                      <img class="map-showcase-img" src="/textures/map_military.png" alt="Hightech Military Base Showcase" />
+                    </div>
+                    <div class="map-detail-text">
+                      <div class="map-detail-header">
+                        <h4>Military Base</h4>
+                        <span class="map-detail-sector warning">SECTOR: SECURED</span>
+                      </div>
+                      <p class="map-detail-tagline">Tactical Barracks, Blast Walls & Bubbling Acid</p>
+                      <p class="map-detail-desc">A heavily guarded high-tech tactical base featuring reinforced perimeter blast walls, warehouses, checkpoints, launch ramps, and a bubbling green Acid Pool that melts vehicle armor in seconds.</p>
+                      
+                      <div class="map-spec-grid">
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Terrain Base</span>
+                          <span class="map-spec-value">Reinforced Asphalt</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Gravity Rating</span>
+                          <span class="map-spec-value">1.0G (Standard)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Thermal Hazards</span>
+                          <span class="map-spec-value danger">Toxic Acid Pool (20 DPS)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Special Features</span>
+                          <span class="map-spec-value">Bubbling Green Trails</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Elevated Hangar Panel -->
+                  <div class="map-detail-panel" id="map-panel-hangar" data-detail-map="hangar" role="tabpanel">
+                    <div class="map-detail-visuals">
+                      <img class="map-showcase-img" src="/textures/map_hangar.png" alt="Elevated Hangar Showcase" />
+                    </div>
+                    <div class="map-detail-text">
+                      <div class="map-detail-header">
+                        <h4>Elevated Hangar</h4>
+                        <span class="map-detail-sector danger">SECTOR: VERTICAL</span>
+                      </div>
+                      <p class="map-detail-tagline">Multi-Level Decks, Long Ramps & Lava Pits</p>
+                      <p class="map-detail-desc">A colossal aerospace hangar. Speed up extremely long, inclined metal ramps to access elevated concrete platform rooftops (5m and 10m high) or fall down directly into the boiling lava gaps below!</p>
+                      
+                      <div class="map-spec-grid">
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Terrain Base</span>
+                          <span class="map-spec-value warning">Industrial Steel Plating</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Gravity Rating</span>
+                          <span class="map-spec-value">1.0G (Standard)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Thermal Hazards</span>
+                          <span class="map-spec-value danger">Boiling Lava Pit (22 DPS)</span>
+                        </div>
+                        <div class="map-spec-item">
+                          <span class="map-spec-label">Special Features</span>
+                          <span class="map-spec-value warning">Flat Rooftop Riding Support</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
           </section>
           

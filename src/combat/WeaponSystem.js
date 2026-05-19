@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { angleTo, distance2D, findObbCollision, forwardFromYaw, makeObb } from '../core/collision.js';
 import { weaponCatalog } from '../data/weapons.js';
 import { applyDamage, applyImpactPush } from './DamageSystem.js';
+import { applyTurretEnhancementVisual } from '../vehicles/VehicleFactory.js';
 
 function slotReady(slot) {
   if (!slot || slot.cooldown > 0 || slot.isReloading) return false;
@@ -20,6 +21,7 @@ function consumeSlot(slot, weapon) {
 
 function startReload(slot) {
   if (!slot || slot.magazineSize === undefined || slot.isReloading || slot.ammoInMagazine >= slot.magazineSize) return;
+  if (Number.isFinite(slot.reserveAmmo) && slot.reserveAmmo <= 0) return;
   slot.isReloading = true;
   slot.reloadRemaining = slot.reloadTime;
 }
@@ -76,12 +78,35 @@ export function fireWeapon(ctx, physics, owner, slotName, targetPoint, effects) 
       }
     }
 
-    const mesh = new THREE.Mesh(
-      new THREE.SphereGeometry(weapon.radius, 14, 8),
-      new THREE.MeshStandardMaterial({ color: weapon.color, emissive: weapon.color, emissiveIntensity: 1.4 }),
-    );
-    mesh.position.set(start.x, start.y, start.z);
-    ctx.scene.add(mesh);
+    // Acquire a projectile mesh from the pre-allocated pool (completely zero-lag)
+    let mesh = null;
+    if (ctx.projectileMeshPool && ctx.projectileMeshPool.length > 0) {
+      mesh = ctx.projectileMeshPool.pop();
+      mesh.scale.setScalar(weapon.radius);
+      mesh.material.color.set(weapon.color);
+      mesh.position.set(start.x, start.y, start.z);
+      mesh.visible = true;
+    } else {
+      // Fallback in case the pool is depleted (highly unlikely, but safe)
+      mesh = new THREE.Mesh(
+        new THREE.SphereGeometry(weapon.radius, 8, 8),
+        new THREE.MeshBasicMaterial({ color: weapon.color }),
+      );
+      mesh.position.set(start.x, start.y, start.z);
+      ctx.scene.add(mesh);
+    }
+
+    // Acquire and activate a light from the pre-allocated pool (completely zero-lag)
+    let pLight = null;
+    if (ctx.projectileLightPool && ctx.projectileLightPool.length > 0) {
+      pLight = ctx.projectileLightPool.pop();
+      pLight.color.set(weapon.color);
+      pLight.intensity = 3.6;
+      pLight.distance = 15;
+      pLight.decay = 1.8;
+      pLight.position.set(start.x, start.y, start.z);
+    }
+
     const rapier = physics.createProjectileBody(weapon.radius, start.x, start.y, start.z);
     lastEntity = ctx.ecs.add({
       projectile: {
@@ -95,6 +120,7 @@ export function fireWeapon(ctx, physics, owner, slotName, targetPoint, effects) 
         pierce: weapon.pierce || 0,
         armTime: weapon.armTime || 0,
         target: homingTarget,
+        pointLight: pLight,
       },
       transform: { x: start.x, y: start.y, z: start.z, yaw: aimYawSpread },
       velocity: { x: dir.x * weapon.speed, y: 0, z: dir.z * weapon.speed },
@@ -170,15 +196,17 @@ export function findProjectileWorldHit(ctx, projectile) {
   const obb = makeObb(projectile.transform.x, projectile.transform.z, probeSize, probeSize, projectile.transform.yaw || 0);
   const projY = projectile.transform.y ?? 0.7;
   const nearbyShapes = ctx.collisionShapes.filter((shape) => {
-    let obstacleHeight = 0;
-    if (shape.type === 'wall' || shape.type === 'building') {
-      obstacleHeight = 35; // Tall obstacles/boundaries
-    } else if (shape.type === 'barrier') {
-      obstacleHeight = 0.6;
-    } else if (shape.type === 'crate') {
-      obstacleHeight = 1.8;
-    } else if (shape.type === 'parked-car') {
-      obstacleHeight = 1.3;
+    let obstacleHeight = shape.height !== undefined && shape.height > 0 ? shape.height : 0;
+    if (obstacleHeight === 0) {
+      if (shape.type === 'wall' || shape.type === 'building') {
+        obstacleHeight = 35; // Tall obstacles/boundaries
+      } else if (shape.type === 'barrier') {
+        obstacleHeight = 0.6;
+      } else if (shape.type === 'crate') {
+        obstacleHeight = 1.8;
+      } else if (shape.type === 'parked-car') {
+        obstacleHeight = 1.3;
+      }
     }
     
     if (projY >= obstacleHeight) return false; // Fly over low obstacles
@@ -218,7 +246,30 @@ function handleWorldHit(ctx, projectile, hit, effects, physics) {
 }
 
 function removeProjectile(ctx, projectile, physics) {
-  if (projectile.renderable?.group) ctx.scene.remove(projectile.renderable.group);
+  const p = projectile.projectile;
+  if (p && p.pointLight) {
+    p.pointLight.intensity = 0;
+    p.pointLight.position.set(0, -1000, 0);
+    if (ctx.projectileLightPool) {
+      ctx.projectileLightPool.push(p.pointLight);
+    }
+    p.pointLight = null;
+  }
+  if (projectile.renderable?.group) {
+    const mesh = projectile.renderable.group;
+    // Check if this mesh belongs to the pre-allocated pool
+    if (mesh.isPooled) {
+      mesh.visible = false;
+      mesh.position.set(0, -1000, 0);
+      if (ctx.projectileMeshPool) {
+        ctx.projectileMeshPool.push(mesh);
+      }
+    } else {
+      // If it was a dynamically spawned fallback mesh, remove it from the scene
+      ctx.scene.remove(mesh);
+    }
+    projectile.renderable.group = null;
+  }
   if (projectile.rapierBody) physics.remove(projectile.rapierBody);
   ctx.ecs.remove(projectile);
 }
@@ -226,14 +277,43 @@ function removeProjectile(ctx, projectile, physics) {
 export function updateWeapons(ctx, physics, dt, effects) {
   if (!ctx.player || !ctx.match?.active || ctx.match.ended) return;
   for (const entity of ctx.ecs.entities.filter((e) => e.weaponSlots)) {
-    Object.values(entity.weaponSlots).forEach((slot) => {
+    Object.entries(entity.weaponSlots).forEach(([slotKey, slot]) => {
       if (!slot) return;
       slot.cooldown = Math.max(0, slot.cooldown - dt);
+
+      // Revert if finite turret ammo is fully depleted (both magazine and reserve)
+      if (slotKey === 'turret' && slot.weaponId !== 'turret') {
+        if (slot.ammoInMagazine <= 0 && Number.isFinite(slot.reserveAmmo) && slot.reserveAmmo <= 0 && !slot.isReloading) {
+          const defaultTurret = entity.defaultTurret || {
+            weaponId: 'turret',
+            magazineSize: 30,
+            reloadTime: 1.5,
+            style: 'ring',
+          };
+          slot.weaponId = defaultTurret.weaponId;
+          slot.magazineSize = defaultTurret.magazineSize;
+          slot.reloadTime = defaultTurret.reloadTime;
+          slot.ammoInMagazine = defaultTurret.magazineSize;
+          slot.reserveAmmo = Infinity;
+          slot.cooldown = 0;
+          slot.isReloading = false;
+          slot.reloadRemaining = 0;
+          applyTurretEnhancementVisual(entity, defaultTurret.style, entity.teamColor || '#82ffcf', ctx);
+        }
+      }
+
       if (slot.isReloading) {
         slot.reloadRemaining = Math.max(0, slot.reloadRemaining - dt);
         if (slot.reloadRemaining <= 0) {
           slot.isReloading = false;
-          slot.ammoInMagazine = slot.magazineSize;
+          if (Number.isFinite(slot.reserveAmmo)) {
+            const needed = slot.magazineSize - slot.ammoInMagazine;
+            const refill = Math.min(needed, slot.reserveAmmo);
+            slot.ammoInMagazine += refill;
+            slot.reserveAmmo -= refill;
+          } else {
+            slot.ammoInMagazine = slot.magazineSize;
+          }
         }
       } else if (slot.magazineSize !== undefined && slot.ammoInMagazine <= 0) {
         startReload(slot);
@@ -275,6 +355,9 @@ export function updateWeapons(ctx, physics, dt, effects) {
     projectile.transform.z += projectile.velocity.z * dt;
     projectile.transform.y = projectile.transform.y ?? 0.7;
     projectile.renderable.group.position.set(projectile.transform.x, projectile.transform.y, projectile.transform.z);
+    if (p.pointLight) {
+      p.pointLight.position.set(projectile.transform.x, projectile.transform.y, projectile.transform.z);
+    }
     physics.setTranslation(projectile.rapierBody.body, projectile.transform.x, projectile.transform.y, projectile.transform.z);
     
     let trailType = 'plasma';
@@ -282,7 +365,7 @@ export function updateWeapons(ctx, physics, dt, effects) {
     if (weapon.id === 'gravity-imploder') trailType = 'gravity';
     if (weapon.id === 'toxic-cask') trailType = 'toxic';
     if (weapon.id === 'rail-slug') trailType = 'spark';
-    effects.emitTrail(projectile.transform.x, projectile.transform.z, trailType);
+    effects.emitTrail(projectile.transform.x, projectile.transform.y, projectile.transform.z, trailType);
 
     if (p.age > weapon.lifetime) {
       explode(ctx, projectile, effects, physics);
@@ -326,12 +409,13 @@ export function updateWeapons(ctx, physics, dt, effects) {
       }
     }
 
-    const outside = Math.abs(projectile.transform.x) > 214 || Math.abs(projectile.transform.z) > 214;
+    const mapLimit = (ctx.currentMapSize || 430) * 0.5 - 6;
+    const outside = Math.abs(projectile.transform.x) > mapLimit || Math.abs(projectile.transform.z) > mapLimit;
     if (outside) {
       if (p.bounces > 0) {
         p.bounces -= 1;
-        if (Math.abs(projectile.transform.x) > 214) projectile.velocity.x *= -1;
-        if (Math.abs(projectile.transform.z) > 214) projectile.velocity.z *= -1;
+        if (Math.abs(projectile.transform.x) > mapLimit) projectile.velocity.x *= -1;
+        if (Math.abs(projectile.transform.z) > mapLimit) projectile.velocity.z *= -1;
       } else explode(ctx, projectile, effects, physics);
     }
   }

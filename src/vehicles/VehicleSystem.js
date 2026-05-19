@@ -61,15 +61,17 @@ export function updateVehicles(ctx, dt, effects) {
     // Filter collision shapes based on vehicle height
     const carY = transform.y || 0;
     const filteredShapes = ctx.collisionShapes.filter((shape) => {
-      let obstacleHeight = 0;
-      if (shape.type === 'wall' || shape.type === 'building') {
-        obstacleHeight = 35; // Tall obstacles/boundaries
-      } else if (shape.type === 'barrier') {
-        obstacleHeight = 0.6;
-      } else if (shape.type === 'crate') {
-        obstacleHeight = 1.8;
-      } else if (shape.type === 'parked-car') {
-        obstacleHeight = 1.3;
+      let obstacleHeight = shape.height !== undefined && shape.height > 0 ? shape.height : 0;
+      if (obstacleHeight === 0) {
+        if (shape.type === 'wall' || shape.type === 'building') {
+          obstacleHeight = 35; // Tall obstacles/boundaries
+        } else if (shape.type === 'barrier') {
+          obstacleHeight = 0.6;
+        } else if (shape.type === 'crate') {
+          obstacleHeight = 1.8;
+        } else if (shape.type === 'parked-car') {
+          obstacleHeight = 1.3;
+        }
       }
       return carY < obstacleHeight;
     });
@@ -102,17 +104,82 @@ export function updateVehicles(ctx, dt, effects) {
     if (transform.y === undefined) transform.y = 0;
     if (velocity.y === undefined) velocity.y = 0;
 
+    let groundHeight = 0;
+    let climbingSlope = 0;
+    if (ctx.ramps) {
+      for (const ramp of ctx.ramps) {
+        const dx = transform.x - ramp.x;
+        const dz = transform.z - ramp.z;
+        const cos = Math.cos(ramp.yaw);
+        const sin = Math.sin(ramp.yaw);
+        const localX = dx * cos + dz * sin;
+        const localZ = -dx * sin + dz * cos;
+        
+        if (Math.abs(localX) <= ramp.w / 2 && Math.abs(localZ) <= ramp.d / 2) {
+          const t = (localZ + ramp.d / 2) / ramp.d;
+          const h = ramp.hStart + t * (ramp.hEnd - ramp.hStart);
+          if (h > groundHeight) {
+            groundHeight = h;
+            climbingSlope = (ramp.hEnd - ramp.hStart) / ramp.d;
+          }
+        }
+      }
+    }
+
     velocity.y -= dt * 45; // gravity
     transform.y += velocity.y * dt;
-
-    if (transform.y <= 0) {
+    if (transform.y <= groundHeight) {
       if (velocity.y < -15 && velocity.collisionCooldown <= 0) {
-        effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, Math.min(15, Math.abs(velocity.y) * 0.5));
-        ctx.cameraEffects?.add(Math.min(0.2, Math.abs(velocity.y) * 0.01));
+        const landingSpeed = Math.abs(velocity.y);
+        if (landingSpeed > 18) {
+          // Large landing slam! Emit a massive radial shockwave of dust and sparks
+          effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 18);
+          for (let i = 0; i < 18; i += 1) {
+            const a = Math.random() * Math.PI * 2;
+            const cos = Math.cos(a);
+            const sin = Math.sin(a);
+            effects.emitTrail(
+              transform.x + cos * 1.4,
+              groundHeight + 0.1,
+              transform.z + sin * 1.4,
+              'dust'
+            );
+          }
+          if (isPlayer) {
+            ctx.cameraEffects?.add(Math.min(0.48, landingSpeed * 0.024));
+          }
+        } else {
+          effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, Math.min(15, landingSpeed * 0.5));
+          if (isPlayer) {
+            ctx.cameraEffects?.add(Math.min(0.22, landingSpeed * 0.012));
+          }
+        }
         velocity.collisionCooldown = 0.2;
       }
-      transform.y = 0;
-      velocity.y = 0;
+      transform.y = groundHeight;
+      velocity.y = climbingSlope > 0 ? Math.max(0, velocity.speed * climbingSlope) : 0;
+      if (climbingSlope > 0) {
+        stability.pitch = THREE.MathUtils.lerp(stability.pitch, Math.atan(climbingSlope), Math.min(1, dt * 10));
+      }
+    } else if (transform.y > 0.1) {
+      // In the air: pitch matches vertical velocity trajectory
+      const airPitch = THREE.MathUtils.clamp(velocity.y * 0.015, -0.4, 0.4);
+      stability.pitch = THREE.MathUtils.lerp(stability.pitch, airPitch, Math.min(1, dt * 5));
+    }
+
+    // In-Air rear wheel wind streamlines
+    const isAirborne = (transform.y || 0) > groundHeight + 0.4;
+    if (isAirborne && Math.abs(velocity.speed) > 20) {
+      const right = { x: -forward.z, z: forward.x };
+      const ly = transform.y + 0.1;
+      const lx = transform.x - forward.x * 1.2 - right.x * 0.7;
+      const lz = transform.z - forward.z * 1.2 - right.z * 0.7;
+      const rx = transform.x - forward.x * 1.2 + right.x * 0.7;
+      const rz = transform.z - forward.z * 1.2 + right.z * 0.7;
+      
+      // Emit dual streamlines!
+      effects.emitTrail(lx, ly, lz, 'plasma');
+      effects.emitTrail(rx, ly, rz, 'plasma');
     }
 
     if (ctx.specialTiles && transform.y < 1) {
@@ -132,7 +199,9 @@ export function updateVehicles(ctx, dt, effects) {
             if (velocity.y <= 0) {
               velocity.y = 35;
               effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 15);
-              ctx.cameraEffects?.add(0.1);
+              if (isPlayer) {
+                ctx.cameraEffects?.add(0.12);
+              }
               if (entity.score) {
                 if (!entity.score.specialFloorUses) entity.score.specialFloorUses = { turbo: 0, jump: 0 };
                 entity.score.specialFloorUses.jump += 1;
@@ -144,6 +213,91 @@ export function updateVehicles(ctx, dt, effects) {
     }
     if (entity._lastTurboTile > 0) entity._lastTurboTile -= dt;
     else entity._lastTurboTile = 0;
+
+    // Map-Specific Interactive Hazards
+    if (ctx.activeMapId === 'basin') {
+      // Doom Basin central magma pit centered at (0,0), size 24x36, ground level (y <= 0.25)
+      if (Math.abs(transform.x) <= 12.0 && Math.abs(transform.z) <= 18.0 && (transform.y || 0) <= 0.25) {
+        // Thermal melt tick! Apply progressive burning damage
+        applyDamage(entity, dt * 22, 'thermal', null, effects, { ctx });
+        
+        // Emit high intensity fire wheel sparks
+        if (Math.random() < 0.45) {
+          effects.emitTrail(
+            transform.x + (Math.random() - 0.5) * 1.5,
+            (transform.y || 0) + 0.1,
+            transform.z + (Math.random() - 0.5) * 1.5,
+            'fire'
+          );
+        }
+      }
+    } else if (ctx.activeMapId === 'military') {
+      // Hightech Military Base: Central toxic bubbling Acid Pool centered at (0, 0), size 36x36, ground level (y <= 0.25)
+      if (Math.abs(transform.x) <= 18.0 && Math.abs(transform.z) <= 18.0 && (transform.y || 0) <= 0.25) {
+        // Toxic chemical/acid tick! Apply progressive chemical damage
+        applyDamage(entity, dt * 20, 'chemical', null, effects, { ctx });
+        
+        // Emit bubbling green toxic trails
+        if (Math.random() < 0.45) {
+          effects.emitTrail(
+            transform.x + (Math.random() - 0.5) * 1.5,
+            (transform.y || 0) + 0.1,
+            transform.z + (Math.random() - 0.5) * 1.5,
+            'toxic'
+          );
+        }
+      }
+    } else if (ctx.activeMapId === 'hangar') {
+      // Elevated Hangar: Central boiling Lava Pit centered at (0, 0), size 32x48, ground level (y <= 0.25)
+      if (Math.abs(transform.x) <= 16.0 && Math.abs(transform.z) <= 24.0 && (transform.y || 0) <= 0.25) {
+        // Thermal melt tick! Apply progressive burning damage
+        applyDamage(entity, dt * 22, 'thermal', null, effects, { ctx });
+        
+        // Emit high intensity fire wheel sparks
+        if (Math.random() < 0.45) {
+          effects.emitTrail(
+            transform.x + (Math.random() - 0.5) * 1.5,
+            (transform.y || 0) + 0.1,
+            transform.z + (Math.random() - 0.5) * 1.5,
+            'fire'
+          );
+        }
+      }
+    } else if (ctx.activeMapId === 'outpost') {
+      // Neon Outpost: Reactor Core High-Voltage Shock Arcs
+      const cores = [
+        { x: -150, z: 0 },
+        { x: 150, z: 0 },
+        { x: 0, z: -150 },
+        { x: 0, z: 150 }
+      ];
+      for (const core of cores) {
+        const dx = transform.x - core.x;
+        const dz = transform.z - core.z;
+        const dSq = dx * dx + dz * dz;
+        if (dSq < 256) { // within 16m of core center
+          // Electrical arcing damage tick
+          applyDamage(entity, dt * 8, 'energy', null, effects, { ctx });
+          
+          // Emit intense electrical arcing trails surrounding the chassis
+          if (Math.random() < 0.32) {
+            effects.emitTrail(
+              transform.x + (Math.random() - 0.5) * 1.2,
+              (transform.y || 0) + 0.4,
+              transform.z + (Math.random() - 0.5) * 1.2,
+              'gravity' // Glowing dark purple/violet electric arc discharge
+            );
+          }
+        }
+      }
+      
+      // Turbo overloaded electric trailing sparks
+      if (entity._lastTurboTile > 0 && Math.random() < 0.5) {
+        const right = { x: -forward.z, z: forward.x };
+        effects.emitTrail(transform.x - forward.x * 0.8 + right.x * 0.6, (transform.y || 0) + 0.15, transform.z - forward.z * 0.8 + right.z * 0.6, 'plasma');
+        effects.emitTrail(transform.x - forward.x * 0.8 - right.x * 0.6, (transform.y || 0) + 0.15, transform.z - forward.z * 0.8 - right.z * 0.6, 'plasma');
+      }
+    }
 
     velocity.wheelSpin += velocity.speed * dt * 2.7;
     velocity.smokeTimer -= dt;

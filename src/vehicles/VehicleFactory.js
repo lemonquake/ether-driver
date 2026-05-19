@@ -554,7 +554,7 @@ function createWheel(part, trimMaterial, glowMaterial) {
   return { wheel, tire };
 }
 
-function buildLegacyRenderable(def, materials) {
+function buildLegacyRenderable(def, materials, controlledBy = 'ai') {
   const group = new THREE.Group();
   const paint = makePaintMaterial({ ...def, colors: { ...def.colors, trim: '#d9f7ff' } });
   const glass = materials.glass.clone();
@@ -570,6 +570,31 @@ function buildLegacyRenderable(def, materials) {
     group.add(mesh(new THREE.BoxGeometry(0.42, 0.15, 0.06), materials.light, { x: sx, y: 0.22, z: 1.9 }));
     group.add(mesh(new THREE.BoxGeometry(0.44, 0.16, 0.06), brakeLightMaterial, { x: sx, y: 0.24, z: -1.9 }));
   });
+
+  // Dual Real SpotLights (tilted downwards onto ground)
+  [-0.55, 0.55].forEach((sx) => {
+    // 2. Add spotlight target located slightly in front on ground (-0.9 is ground y relative to car center)
+    const target = new THREE.Object3D();
+    target.position.set(sx, -0.9, 9.0);
+    group.add(target);
+
+    // 3. Add real SpotLight (bright, soft, tilted downward, with high shadow quality for player)
+    const spot = new THREE.SpotLight(0xfff5e6, 12.0, 38, Math.PI / 4, 0.5, 1.2);
+    spot.position.set(sx, 0.22, 1.98);
+    spot.target = target;
+    if (controlledBy === 'player') {
+      spot.castShadow = true;
+      spot.shadow.mapSize.width = 1024;
+      spot.shadow.mapSize.height = 1024;
+      spot.shadow.bias = -0.0008;
+      spot.shadow.camera.near = 0.5;
+      spot.shadow.camera.far = 30;
+    } else {
+      spot.castShadow = false;
+    }
+    group.add(spot);
+  });
+
   const wheelPivots = [];
   const wheelMeshes = [];
   [[-1.03, -0.36, 1.23, true], [1.03, -0.36, 1.23, true], [-1.03, -0.36, -1.18, false], [1.03, -0.36, -1.18, false]].forEach(([x, y, z, front]) => {
@@ -778,7 +803,7 @@ function addArmorDetails(group, armor, chassis, trim, glowMaterial) {
   }
 }
 
-function buildCustomRenderable(def) {
+function buildCustomRenderable(def, materials, controlledBy = 'ai') {
   const group = new THREE.Group();
   const paint = makePaintMaterial(def);
   const trim = makeTrimMaterial(def);
@@ -839,6 +864,31 @@ function buildCustomRenderable(def) {
     group.add(mesh(new THREE.BoxGeometry(0.36, 0.12, 0.06), glowMaterial, { x: sx, y: 0.18, z: length * 0.5 + 0.035 }));
     group.add(mesh(new THREE.BoxGeometry(0.38, 0.13, 0.06), brakeLightMaterial, { x: sx, y: 0.18, z: -length * 0.5 - 0.035 }));
   });
+
+  // Dual Real SpotLights (tilted downwards onto ground)
+  [-0.56, 0.56].forEach((sx) => {
+    // 2. Add spotlight target located slightly in front on ground (-0.9 is ground y relative to car center)
+    const target = new THREE.Object3D();
+    target.position.set(sx, -0.9, length * 0.5 + 7.5);
+    group.add(target);
+
+    // 3. Add real SpotLight (bright, soft, tilted downward, with high shadow quality for player)
+    const spot = new THREE.SpotLight(0xfff5e6, 12.0, 38, Math.PI / 4, 0.5, 1.2);
+    spot.position.set(sx, 0.18, length * 0.5 + 0.08);
+    spot.target = target;
+    if (controlledBy === 'player') {
+      spot.castShadow = true;
+      spot.shadow.mapSize.width = 1024;
+      spot.shadow.mapSize.height = 1024;
+      spot.shadow.bias = -0.0008;
+      spot.shadow.camera.near = 0.5;
+      spot.shadow.camera.far = 30;
+    } else {
+      spot.castShadow = false;
+    }
+    group.add(spot);
+  });
+
   group.add(mesh(new THREE.BoxGeometry(width * 0.7, 0.04, length * 0.72), glowMaterial, { y: -0.26, z: 0 }));
 
   const { turret, turretGlowMaterial, teamLight, idleParts } = createTurret(def, turretPaint);
@@ -875,7 +925,7 @@ function buildCustomRenderable(def) {
 
 export function createVehiclePreviewGroup(materials, spec) {
   const def = resolveDefinition(spec);
-  const renderable = def.custom ? buildCustomRenderable(def, materials) : buildLegacyRenderable(def, materials);
+  const renderable = def.custom ? buildCustomRenderable(def, materials, 'player') : buildLegacyRenderable(def, materials, 'player');
   return { def, group: renderable.group, renderable };
 }
 
@@ -905,6 +955,116 @@ export function createGaragePartPortraitGroup(materials, spec, categoryKey) {
   return { def, group, renderable: { group, turret, turretGlowMaterial, teamLight, idleParts, glowMaterials: [glowMaterial, turretGlowMaterial], customGlowColor: `#${glowColor.getHexString()}` } };
 }
 
+export function applyTurretEnhancementVisual(entity, style, colorHex, ctx) {
+  const turretGroup = entity.turret?.group || entity.renderable?.turret;
+  if (!turretGroup) return;
+
+  // Clear existing turret child meshes safely
+  const toRemove = [...turretGroup.children];
+  toRemove.forEach((child) => {
+    turretGroup.remove(child);
+  });
+
+  const accent = new THREE.Color(colorHex);
+  const turretGlowMaterial = new THREE.MeshStandardMaterial({
+    color: accent,
+    emissive: accent,
+    emissiveIntensity: 2.8,
+    transparent: true,
+    opacity: 0.85,
+  });
+
+  const barrelMaterial = new THREE.MeshStandardMaterial({
+    color: 0x22252a,
+    metalness: 0.8,
+    roughness: 0.35,
+  });
+
+  // Base mount ring
+  turretGroup.add(mesh(new THREE.CylinderGeometry(0.42, 0.52, 0.24, 24), barrelMaterial, { y: 0.04 }));
+
+  const core = mesh(new THREE.TorusGeometry(style === 'mortar' ? 0.48 : 0.58, 0.045, 8, 32), turretGlowMaterial, { y: 0.2 }, { x: Math.PI / 2 });
+  turretGroup.add(core);
+
+  const barrelLength = 1.35;
+
+  const addBoxBarrel = (x, y, z, sx = 0.18, sy = 0.14, length = barrelLength, mat = barrelMaterial) => {
+    turretGroup.add(mesh(new THREE.BoxGeometry(sx, sy, length), mat, { x, y, z }));
+  };
+  const addTube = (x, y, z, radius = 0.16, length = barrelLength, mat = barrelMaterial) => {
+    turretGroup.add(mesh(new THREE.CylinderGeometry(radius * 0.82, radius, length, 18), mat, { x, y, z }, { x: Math.PI / 2 }));
+  };
+
+  if (style === 'rail') {
+    turretGroup.add(mesh(new THREE.BoxGeometry(0.16, 0.12, barrelLength), barrelMaterial, { y: 0.12, z: 0.62 }));
+    turretGroup.add(mesh(new THREE.BoxGeometry(0.5, 0.055, barrelLength * 0.82), turretGlowMaterial, { y: 0.23, z: 0.56 }));
+  } else if (style === 'mortar') {
+    turretGroup.add(mesh(new THREE.CylinderGeometry(0.19, 0.25, barrelLength, 18), barrelMaterial, { y: 0.18, z: 0.52 }, { x: Math.PI / 2 }));
+    turretGroup.add(mesh(new THREE.SphereGeometry(0.2, 18, 10), turretGlowMaterial, { y: 0.18, z: 1.08 }));
+  } else if (style === 'twin') {
+    [-0.14, 0.14].forEach((x) => addBoxBarrel(x, 0.12, 0.66, 0.12, 0.12));
+    turretGroup.add(mesh(new THREE.BoxGeometry(0.42, 0.09, 0.58), turretGlowMaterial, { y: 0.24, z: 0.54 }));
+  } else if (style === 'coil' || style === 'needle' || style === 'beam') {
+    addTube(0, 0.14, 0.72, style === 'beam' ? 0.2 : 0.09);
+    turretGroup.add(mesh(new THREE.TorusGeometry(0.25, 0.025, 8, 18), turretGlowMaterial, { y: 0.16, z: 0.42 }, { x: Math.PI / 2 }));
+    turretGroup.add(mesh(new THREE.TorusGeometry(0.2, 0.02, 8, 18), turretGlowMaterial, { y: 0.16, z: 0.82 }, { x: Math.PI / 2 }));
+  } else if (style === 'bloom' || style === 'fan') {
+    const count = style === 'bloom' ? 6 : 5;
+    for (let i = 0; i < count; i += 1) {
+      const x = (i - (count - 1) / 2) * 0.13;
+      addTube(x, 0.13 + Math.abs(x) * 0.16, 0.54, 0.075, barrelLength * 0.74);
+    }
+    turretGroup.add(mesh(new THREE.BoxGeometry(0.8, 0.06, 0.28), turretGlowMaterial, { y: 0.25, z: 0.42 }));
+  } else if (style === 'bell' || style === 'cask') {
+    addTube(0, 0.16, 0.54, style === 'bell' ? 0.28 : 0.23, barrelLength * 0.82);
+    turretGroup.add(mesh(new THREE.CylinderGeometry(0.36, 0.26, 0.28, 24), barrelMaterial, { y: 0.16, z: 0.96 }, { x: Math.PI / 2 }));
+  } else if (style === 'antler' || style === 'fork' || style === 'tuner') {
+    [-0.22, 0.22].forEach((x) => {
+      addBoxBarrel(x, 0.15, 0.66, 0.08, 0.1, barrelLength * 0.9);
+      turretGroup.add(mesh(new THREE.BoxGeometry(0.06, 0.18, barrelLength * 0.55), turretGlowMaterial, { x: x * 0.72, y: 0.27, z: 0.62 }));
+    });
+    turretGroup.add(mesh(new THREE.SphereGeometry(0.14, 16, 10), turretGlowMaterial, { y: 0.18, z: 0.34 }));
+  } else if (style === 'halo') {
+    for (let i = 0; i < 8; i += 1) {
+      const a = (i / 8) * Math.PI * 2;
+      addTube(Math.cos(a) * 0.32, 0.18 + Math.sin(a) * 0.1, 0.58, 0.055, barrelLength * 0.58);
+    }
+    turretGroup.add(mesh(new THREE.TorusGeometry(0.38, 0.026, 8, 28), turretGlowMaterial, { y: 0.18, z: 0.46 }, { x: Math.PI / 2 }));
+  } else if (style === 'rack' || style === 'nest') {
+    const rows = style === 'nest' ? 3 : 2;
+    const cols = style === 'nest' ? 4 : 5;
+    for (let row = 0; row < rows; row += 1) {
+      for (let col = 0; col < cols; col += 1) {
+        addTube((col - (cols - 1) / 2) * 0.12, 0.08 + row * 0.12, 0.46 + row * 0.05, 0.045, barrelLength * 0.5);
+      }
+    }
+    turretGroup.add(mesh(new THREE.BoxGeometry(0.78, 0.3, 0.3), barrelMaterial, { y: 0.1, z: 0.28 }));
+  } else if (style === 'drum') {
+    turretGroup.add(mesh(new THREE.CylinderGeometry(0.28, 0.28, 0.52, 24), barrelMaterial, { y: 0.17, z: 0.42 }, { z: Math.PI / 2 }));
+    for (let i = 0; i < 6; i += 1) {
+      const a = (i / 6) * Math.PI * 2;
+      addTube(Math.cos(a) * 0.16, 0.17 + Math.sin(a) * 0.16, 0.72, 0.045, barrelLength * 0.82);
+    }
+  } else if (style === 'pod') {
+    turretGroup.add(mesh(new THREE.BoxGeometry(0.66, 0.34, 0.58), barrelMaterial, { y: 0.12, z: 0.38 }));
+    [-0.18, 0, 0.18].forEach((x) => addBoxBarrel(x, 0.15, 0.78, 0.08, 0.1, barrelLength * 0.72));
+  } else if (style === 'splitter') {
+    [-0.24, 0.24].forEach((x) => addBoxBarrel(x, 0.13, 0.7, 0.1, 0.12));
+    addBoxBarrel(0, 0.26, 0.56, 0.06, 0.22, turretGlowMaterial);
+  } else {
+    turretGroup.add(mesh(new THREE.BoxGeometry(0.18, 0.14, barrelLength), barrelMaterial, { y: 0.1, z: 0.68 }));
+    turretGroup.add(mesh(new THREE.BoxGeometry(0.06, 0.22, barrelLength * 0.74), turretGlowMaterial, { y: 0.19, z: 0.62 }));
+  }
+
+  const teamLight = new THREE.PointLight(accent, 1.2, 8);
+  teamLight.position.set(0, 0.72, 0);
+  turretGroup.add(teamLight);
+
+  entity.renderable.turretGlowMaterial = turretGlowMaterial;
+  entity.renderable.teamLight = teamLight;
+  entity.renderable.idleParts = [core];
+}
+
 export function applyVehicleTeamVisuals(entity, team, displayName) {
   const teamColor = new THREE.Color(team.color);
   const glowColor = entity.renderable.customGlowColor ? new THREE.Color(entity.renderable.customGlowColor) : teamColor;
@@ -920,7 +1080,7 @@ export function applyVehicleTeamVisuals(entity, team, displayName) {
 
 export function createVehicleEntity(ctx, materials, spec, position, yaw = 0, controlledBy = 'ai') {
   const def = resolveDefinition(spec);
-  const renderable = def.custom ? buildCustomRenderable(def, materials) : buildLegacyRenderable(def, materials);
+  const renderable = def.custom ? buildCustomRenderable(def, materials, controlledBy) : buildLegacyRenderable(def, materials, controlledBy);
   const { group } = renderable;
   group.position.set(position.x, def.stats.rideHeight, position.z);
   group.rotation.set(0, yaw, 0);
@@ -950,6 +1110,12 @@ export function createVehicleEntity(ctx, materials, spec, position, yaw = 0, con
       turret: { weaponId: 'turret', ammoInMagazine: stats.turretMagazineSize, magazineSize: stats.turretMagazineSize, reserveAmmo: Infinity, cooldown: 0, reloadTime: stats.turretReloadTime, reloadRemaining: 0, isReloading: false },
       q: def.weaponSlots.q ? { weaponId: def.weaponSlots.q, ammo: 3, cooldown: 0 } : null,
       e: def.weaponSlots.e ? { weaponId: def.weaponSlots.e, ammo: 3, cooldown: 0 } : null,
+    },
+    defaultTurret: {
+      weaponId: 'turret',
+      magazineSize: stats.turretMagazineSize,
+      reloadTime: stats.turretReloadTime,
+      style: def.parts?.turret?.style || 'ring',
     },
     turret: { group: renderable.turret, yaw: 0, targetYaw: yaw },
     renderable: { ...renderable, label },

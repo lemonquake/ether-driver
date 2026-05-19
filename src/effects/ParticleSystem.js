@@ -200,7 +200,9 @@ export function createParticleSystem(scene) {
         ? 'plasma'
         : damageType === 'fire' || damageType === 'explosive'
           ? 'fire'
-          : 'spark';
+          : damageType === 'chemical' || damageType === 'toxic' || damageType === 'acid'
+            ? 'toxic'
+            : 'spark';
 
       for (let i = 0; i < amount; i += 1) {
         const spread = (Math.random() - 0.5) * 1.3;
@@ -307,13 +309,28 @@ export function createParticleSystem(scene) {
         smokeAmount: playerDeath ? 1 : 2,
       });
     },
-    emitTrail(x, z, color = 'plasma') {
-      const type = ['smoke', 'toxic', 'gravity'].includes(color) ? color : 'plasma';
+    emitTrail(x, y, z, color = 'plasma') {
+      let finalY = 0.55;
+      let finalZ = z;
+      let finalColor = color;
+      
+      if (typeof y === 'string') {
+        finalY = 0.55;
+        finalZ = y;
+        finalColor = z || 'plasma';
+      } else if (y !== undefined && z !== undefined) {
+        finalY = y;
+        finalZ = z;
+      } else {
+        finalZ = z !== undefined ? z : y;
+      }
+      
+      const type = poolKeys.includes(finalColor) ? finalColor : 'plasma';
       emitTo(
         type,
         x,
-        0.55,
-        z,
+        finalY,
+        finalZ,
         (Math.random() - 0.5) * 0.3,
         0.25,
         (Math.random() - 0.5) * 0.3,

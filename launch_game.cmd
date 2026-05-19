@@ -57,8 +57,11 @@ if not exist "node_modules\" (
     )
 )
 
-echo [INFO] Launching game server at http://127.0.0.1:5173
-start "" "http://127.0.0.1:5173"
+echo [IMPORTANT] ========================================================
+echo [IMPORTANT] IF YOU DO NOT SEE THE NEW TURRET OR MAP SELECTION UPDATES,
+echo [IMPORTANT] PRESS "CTRL + F5" IN YOUR BROWSER TO FORCE A HARD CACHE RESET!
+echo [IMPORTANT] ========================================================
+echo.
 
 if defined NPM_CMD (
     call "%NPM_CMD%" run dev
@@ -70,7 +73,7 @@ if defined NPM_CMD (
         popd
         exit /b 1
     )
-    call "%NODE_CMD%" "node_modules\vite\bin\vite.js" --host 127.0.0.1
+    call "%NODE_CMD%" "node_modules\vite\bin\vite.js" --host 127.0.0.1 --force
 )
 
 pause
