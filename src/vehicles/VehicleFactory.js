@@ -24,33 +24,33 @@ const globalTextureLoader = new THREE.TextureLoader();
 const textureCache = {};
 const customTextureCache = new Map();
 
+const mapName = {
+  'carbon': 'carbon.png',
+  'rust': 'rust.png',
+  'digital': 'digital_camo.png',
+  'hazard': 'hazard.png',
+  'oil': 'oil_slick.png',
+  'camo': 'desert_camo.png',
+  'graffiti': 'graffiti.png',
+  'flake': 'metal_flake.png',
+  'matte': 'matte_metal.png',
+  'circuit': 'circuit.png',
+  'tiger': 'tiger.png',
+  'interceptor': 'interceptor.png',
+  'lava': 'lava.png',
+  'pearl': 'pearl.png',
+  'panel': 'mecha_panels.png',
+  'hex-camo': 'hex_camo.png',
+  'dust': 'moon_dust.png',
+  'shark': 'shark_art.png',
+  'grid': 'synth_grid.png',
+  'scar': 'scratched_primer.png'
+};
+
 function loadPaintTexture(textureId, repeatX = 2, repeatY = 2) {
   if (!textureId) return null;
   const cacheKey = `${textureId}_${repeatX}_${repeatY}`;
   if (textureCache[cacheKey]) return textureCache[cacheKey];
-
-  const mapName = {
-    'carbon': 'carbon.png',
-    'rust': 'rust.png',
-    'digital': 'digital_camo.png',
-    'hazard': 'hazard.png',
-    'oil': 'oil_slick.png',
-    'camo': 'desert_camo.png',
-    'graffiti': 'graffiti.png',
-    'flake': 'metal_flake.png',
-    'matte': 'matte_metal.png',
-    'circuit': 'circuit.png',
-    'tiger': 'tiger.png',
-    'interceptor': 'interceptor.png',
-    'lava': 'lava.png',
-    'pearl': 'pearl.png',
-    'panel': 'mecha_panels.png',
-    'hex-camo': 'hex_camo.png',
-    'dust': 'moon_dust.png',
-    'shark': 'shark_art.png',
-    'grid': 'synth_grid.png',
-    'scar': 'scratched_primer.png'
-  };
 
   const filename = mapName[textureId] || 'carbon.png';
   const texture = globalTextureLoader.load(`./textures/${filename}`);
@@ -62,6 +62,16 @@ function loadPaintTexture(textureId, repeatX = 2, repeatY = 2) {
   textureCache[cacheKey] = texture;
   return texture;
 }
+
+export function preloadAllPaintTextures() {
+  const repeats = [[2, 2], [3, 3], [4, 4], [1, 3]];
+  Object.keys(mapName).forEach((textureId) => {
+    repeats.forEach(([rx, ry]) => {
+      loadPaintTexture(textureId, rx, ry);
+    });
+  });
+}
+
 
 function loadCustomPaintTexture(dataUrl, repeatX = 2, repeatY = 2) {
   if (!dataUrl) return null;

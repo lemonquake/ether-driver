@@ -78,6 +78,7 @@ export function createHUD(ctx) {
     moreDetailsButton: document.querySelector('#moreDetailsButton'),
     detailedResults: document.querySelector('#detailedResults'),
     rewardPopups: document.querySelector('#rewardPopups'),
+    driversManual: document.querySelector('#driversManual'),
     showRewardPopup: (text) => {
       const el = document.createElement('div');
       el.className = 'reward-popup';
@@ -523,6 +524,10 @@ function showKillBanner(ui, line, color) {
 
 // ── Main HUD Update ─────────────────────────────────────────
 export function updateHUD(ctx, ui, dt = 0.016) {
+  if (ui.driversManual) {
+    const showManual = ctx.match.active && !ctx.match.paused && !ctx.match.ended;
+    ui.driversManual.classList.toggle('hidden', !showManual);
+  }
   const player = ctx.player;
   updateMatchUI(ctx, ui);
   processKillBanners(ctx, ui);

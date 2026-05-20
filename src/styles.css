@@ -5907,10 +5907,24 @@ body {
 .brand,
 .team-card,
 .shop-card,
-.quick-tip-card,
-.scoreboard {
+.quick-tip-card {
   position: relative !important;
   overflow: hidden !important;
+  background-image:
+    repeating-linear-gradient(0deg, transparent 0px, transparent 1px, rgba(0, 0, 0, 0.15) 1px, rgba(0, 0, 0, 0.15) 3px),
+    radial-gradient(circle, rgba(113, 247, 255, 0.04) 1px, transparent 1px) !important;
+  background-size: 100% 3px, 8px 8px !important;
+  background-color: rgba(6, 9, 14, 0.72) !important;
+  backdrop-filter: blur(20px) saturate(1.25) !important;
+  border: 1px solid rgba(113, 247, 255, 0.22) !important;
+  box-shadow:
+    inset 0 0 12px rgba(113, 247, 255, 0.08),
+    0 8px 32px rgba(0, 0, 0, 0.45) !important;
+}
+
+.scoreboard {
+  position: fixed !important;
+  overflow: auto !important;
   background-image:
     repeating-linear-gradient(0deg, transparent 0px, transparent 1px, rgba(0, 0, 0, 0.15) 1px, rgba(0, 0, 0, 0.15) 3px),
     radial-gradient(circle, rgba(113, 247, 255, 0.04) 1px, transparent 1px) !important;
@@ -6320,4 +6334,73 @@ body {
 .weapon-setup-stat strong.stat-speed { color: #7df9ff; }
 .weapon-setup-stat strong.stat-cooldown { color: #ffcc66; }
 .weapon-setup-stat strong.stat-ammo { color: #82ffcf; }
+
+/* ── Driver's Manual HUD Guide ─────────────────────── */
+.drivers-manual {
+  position: absolute;
+  right: 22px;
+  top: 48%;
+  transform: translateY(-50%);
+  width: 210px;
+  padding: 14px 16px;
+  border: 1px solid rgb(255 255 255 / 10%);
+  background: linear-gradient(180deg, rgb(8 11 13 / 64%), rgb(8 11 13 / 88%));
+  backdrop-filter: blur(20px);
+  border-radius: 8px;
+  box-shadow: 
+    0 16px 40px rgb(0 0 0 / 40%), 
+    inset 0 1px 1px rgb(255 255 255 / 10%),
+    0 0 15px rgb(130 255 207 / 4%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.drivers-manual.hidden {
+  display: none !important;
+}
+
+.manual-header {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: #82ffcf;
+  text-transform: uppercase;
+  border-bottom: 1.5px solid rgb(130 255 207 / 20%);
+  padding-bottom: 8px;
+  margin-bottom: 2px;
+}
+
+.manual-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.manual-row .key {
+  display: inline-block;
+  padding: 3px 7px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 8%);
+  border: 1px solid rgb(255 255 255 / 14%);
+  color: #ffffff;
+  font-family: monospace;
+  font-size: 9px;
+  font-weight: bold;
+  box-shadow: 0 2px 4px rgb(0 0 0 / 25%);
+  white-space: nowrap;
+  letter-spacing: 0.5px;
+}
+
+.manual-row .action {
+  font-size: 11px;
+  color: rgb(244 247 251 / 82%);
+  text-align: right;
+  font-weight: 500;
+}
+
 

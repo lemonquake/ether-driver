@@ -20,7 +20,7 @@ import { getVehicleStats } from './data/vehicleCatalog.js';
 import { buildGarageVehicleDefinition, garageMaterialStyles, garagePartCatalog, getGarageStats, loadGarageBlueprint, saveGarageBlueprint, sanitizeGarageBlueprint } from './data/vehicleParts.js';
 import { createDefaultMatchState, startMatch, updateMatch, clearVehicles } from './match/MatchSystem.js';
 import { cloneDefaultTeams } from './data/teams.js';
-import { createGaragePartPortraitGroup, createVehiclePreviewGroup } from './vehicles/VehicleFactory.js';
+import { createGaragePartPortraitGroup, createVehiclePreviewGroup, preloadAllPaintTextures } from './vehicles/VehicleFactory.js';
 import { loadProgression, buyPremiumPart, upgradeStat, UPGRADE_MAX_LEVELS, getExpRequirement } from './core/ProgressionSystem.js';
 import { premiumPartDefinitions, PREMIUM_RARITIES } from './data/premiumParts.js';
 import { GARAGE_BUILD_LIMIT, clearActiveGarageTemplateId, createGarageTemplate, deleteGarageTemplate, getActiveGarageTemplateId, loadGarageTemplates, recordGarageTemplateUse, refreshGarageCatalog, renameGarageTemplate, setActiveGarageTemplateId, updateGarageTemplate } from './data/vehicleParts.js';
@@ -35,6 +35,7 @@ const materials = createMaterials(ctx.renderer);
 const effects = createParticleSystem(ctx.scene);
 ctx.cameraEffects = createCameraEffects();
 ctx.materials = materials;
+preloadAllPaintTextures();
 ctx._vehicleFactory = { createVehiclePreviewGroup };
 ctx.match = createDefaultMatchState();
 const ui = createHUD(ctx);
@@ -2464,14 +2465,39 @@ function compressImageFileForStorage(file, maxSize = 512, quality = 0.78) {
   });
 }
 
-function beginMatch() {
+async function beginMatch() {
+  const btn = ui.startMatchButton;
+  if (!btn) return;
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = 'LOADING MATCH...';
+
+  // Allow the UI to update to the "LOADING MATCH..." state
+  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
   recordGarageTemplateUse();
   rebuildGameMap(selectedMapId);
   startMatch(ctx, materials, readMatchOptions(), physics);
+
+  // Position camera correctly behind the player
+  updateCamera(0.016);
+
+  try {
+    btn.textContent = 'COMPILING SHADERS...';
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    await ctx.renderer.compileAsync(ctx.scene, ctx.camera);
+  } catch (err) {
+    console.warn('compileAsync failed, using synchronous compile fallback', err);
+    ctx.renderer.compile(ctx.scene, ctx.camera);
+  }
+
   ui.matchMenu.classList.add('hidden');
   ui.resultsOverlay.classList.remove('visible');
   ctx.input.keys.clear();
   canvas.focus();
+
+  btn.disabled = false;
+  btn.textContent = originalText;
 }
 
 ui.startMatchButton.addEventListener('click', beginMatch);
@@ -2922,9 +2948,51 @@ setupInput(ctx, {
   onHudToggle(full) {
     ui.hud.classList.toggle('hud-full', full);
   },
-  onKeyDown(code) {
-    if (code === 'KeyT') {
-      ctx.match.scoreboardOpen = !ctx.match.scoreboardOpen;
+  onKeyDown(code, repeat) {
+    console.log("[Input DEBUG] onKeyDown:", code, "repeat:", repeat);
+    if (code === 'KeyT' || code === 'KeyV') {
+      if (!repeat) {
+        ctx.match.scoreboardOpen = !ctx.match.scoreboardOpen;
+        console.log("[Input DEBUG] Scoreboard toggled. Open =", ctx.match.scoreboardOpen);
+      }
+      return;
+    }
+    if (code === 'KeyB') {
+      if (!repeat) {
+        console.log("[Input DEBUG] KeyB pressed. Active =", ctx.match.active, "Ended =", ctx.match.ended);
+        if (ctx.match.active && !ctx.match.ended) {
+          const shopActive = !ui.matchMenu.classList.contains('hidden') && document.getElementById('shopMenuStep')?.classList.contains('active');
+          if (shopActive) {
+            console.log("[Input DEBUG] Closing Shop...");
+            if (shopOrigin === 'pause') {
+              ui.matchMenu.classList.add('hidden');
+              ctx.match.paused = false;
+            } else {
+              renderSetupStep('team');
+            }
+            canvas.focus();
+          } else {
+            console.log("[Input DEBUG] Opening Shop...");
+            shopOrigin = 'pause';
+            ui.pauseMenu.classList.add('hidden');
+            ui.settingsMenu.classList.add('hidden');
+            ui.matchMenu.classList.remove('hidden');
+            renderSetupStep('shop');
+            renderShop();
+          }
+        } else if (!ctx.match.active) {
+          const shopActive = !ui.matchMenu.classList.contains('hidden') && document.getElementById('shopMenuStep')?.classList.contains('active');
+          if (shopActive) {
+            console.log("[Input DEBUG] Menu Shop active, returning to team setup");
+            renderSetupStep('team');
+          } else {
+            console.log("[Input DEBUG] Menu Shop opening");
+            shopOrigin = 'team';
+            renderSetupStep('shop');
+            renderShop();
+          }
+        }
+      }
       return;
     }
     if (code === 'Escape' && !ctx.match.ended) {

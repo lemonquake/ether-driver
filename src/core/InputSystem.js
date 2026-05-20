@@ -13,7 +13,7 @@ export function setupInput(ctx, handlers = {}) {
     const editingText = ['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target?.tagName);
     if (editingText) return;
     const code = keyCode(event);
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyQ', 'KeyE', 'KeyX', 'KeyT'].includes(code)) event.preventDefault();
+    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyQ', 'KeyE', 'KeyX', 'KeyT', 'KeyV', 'KeyB'].includes(code)) event.preventDefault();
     input.keys.add(code);
     if (code === 'KeyH' && !event.repeat) {
       input.hudFull = !input.hudFull;
@@ -25,7 +25,9 @@ export function setupInput(ctx, handlers = {}) {
 
   window.addEventListener('keyup', (event) => {
     if (['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target?.tagName)) return;
-    input.keys.delete(keyCode(event));
+    const code = keyCode(event);
+    input.keys.delete(code);
+    handlers.onKeyUp?.(code);
   }, { capture: true });
 
   window.addEventListener('blur', () => {
