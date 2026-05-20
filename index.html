@@ -38,9 +38,9 @@
             <p>v1.0 // select your vehicle</p>
           </div>
           <div class="main-menu-nav">
-            <button id="navCampaignButton" type="button" class="main-nav-btn disabled" aria-disabled="true">
+            <button id="navCampaignButton" type="button" class="main-nav-btn">
               <span class="nav-btn-index">00</span>
-              <span class="nav-btn-copy"><b>CAMPAIGN</b><small>WIP // coming soon</small></span>
+              <span class="nav-btn-copy"><b>CAMPAIGN</b><small>Operation: Ether Shield</small></span>
               <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
               <span class="nav-btn-gear"></span>
               <span class="nav-btn-trail"></span>
@@ -570,8 +570,28 @@
             </div>
             <div id="shopGrid" class="shop-grid"></div>
           </section>
+      <!-- GAMEPLAY LOADING SCREEN -->
+      <section id="loadingScreen" class="loading-screen hidden" aria-label="Loading Game">
+        <div class="loading-scanlines"></div>
+        <div class="loading-container">
+          <div class="loading-brand">
+            <h2 class="loading-title">INITIALIZING</h2>
+            <p class="loading-subtitle">// ESTABLISHING CONNECTION TO NEURAL LINK</p>
+          </div>
+          <div class="loading-bar-wrapper">
+            <div id="loadingProgressBar" class="loading-progress-bar" style="width: 0%;"></div>
+            <div class="loading-bar-glitch"></div>
+          </div>
+          <div id="loadingStatusText" class="loading-status-text">CONNECTING TO SECURITIES NETWORK...</div>
+          <div class="loading-details-console">
+            <span class="console-line">SYS_LOAD: RAPIER_3D COMPATIBLE PHYSICS... OK</span>
+            <span class="console-line">SYS_LOAD: THREE_JS WEBGL RENDERER... OK</span>
+            <span class="console-line">SYS_LOAD: ASSET ENGINE INITIALIZED... OK</span>
+            <span class="console-line">SYS_LOAD: SHADER COMPILATION RUNNING... ACTIVE</span>
+          </div>
         </div>
       </section>
+
       <section id="resultsOverlay" class="results-overlay" aria-label="Match results">
         <div class="results-panel">
           <div id="mvpPedestal" class="mvp-pedestal">
@@ -638,6 +658,66 @@
       </section>
 
       <button id="recordRouteButton" class="record-route" type="button">RECORD</button>
+
+      <!-- MISSION BRIEFING OVERLAY -->
+      <section id="briefingContainer" class="briefing-container hidden" aria-label="Mission Briefing">
+        <div class="briefing-scanlines"></div>
+        <div class="briefing-static"></div>
+        <div class="briefing-content">
+          <div class="briefing-glow-border"></div>
+          <header class="briefing-header">
+            <p class="briefing-kicker">// TACTICAL INTERFACE</p>
+            <h1 class="briefing-title">OPERATION: ETHER SHIELD</h1>
+            <p class="briefing-subtitle">MISSION LOCATION: Compound // SECTOR 4</p>
+          </header>
+          <div class="briefing-body">
+            <div class="briefing-radar-box">
+              <div class="radar-tag">// LIVE BLUEPRINT FEED</div>
+              <canvas id="briefingRadarCanvas" width="400" height="300"></canvas>
+              <div class="radar-scanline"></div>
+            </div>
+            <div class="briefing-details">
+              <div class="briefing-section">
+                <h3>SITUATION REPORT</h3>
+                <p>Rogue automated turrets and security drones have lock-downed Sector 4, disabling the extraction gateway. You must infiltrate the compound perimeter, destroy all hostile automated defenses, and secure the exit portal for extraction.</p>
+              </div>
+              <div class="briefing-section">
+                <h3>WIN CONDITIONS</h3>
+                <ul class="briefing-list">
+                  <li><span class="bullet">■</span> Destroy all Static Turrets (0/3 neutralized)</li>
+                  <li><span class="bullet">■</span> Destroy all Floating Drones (0/2 neutralized)</li>
+                  <li><span class="bullet">■</span> Enter the Exit Portal in the top-left corner</li>
+                </ul>
+              </div>
+              <div class="briefing-actions">
+                <button id="briefingCloseBtn" type="button" class="briefing-btn secondary">ABORT</button>
+                <button id="briefingLaunchBtn" type="button" class="briefing-btn primary">DEPLOY VEHICLE</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- DIALOGUE OVERLAY -->
+      <div id="dialogueContainer" class="dialogue-container hidden">
+        <div class="dialogue-scanlines"></div>
+        <canvas id="dialogueStaticCanvas" width="128" height="128"></canvas>
+        <div class="dialogue-frame">
+          <div class="dialogue-portrait-wrapper">
+            <img id="dialoguePortrait" src="" alt="Speaker">
+            <div class="dialogue-portrait-scanner"></div>
+          </div>
+          <div class="dialogue-content">
+            <div id="dialogueSpeaker" class="dialogue-speaker">COMMANDER</div>
+            <div id="dialogueText" class="dialogue-text">...</div>
+            <div class="dialogue-actions">
+              <button id="dialoguePrevBtn" class="dialogue-btn">BACK</button>
+              <button id="dialogueNextBtn" class="dialogue-btn">NEXT</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="vignette"></div>
     </main>
     <script type="module" src="/src/main.js"></script>

@@ -6403,4 +6403,715 @@ body {
   font-weight: 500;
 }
 
+/* ==========================================================================
+   CAMPAIGN MODE & DIALOGUE SYSTEM
+   ========================================================================== */
+
+/* Fullscreen Mission Briefing Container */
+.briefing-container {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(255, 85, 0, 0.12), transparent 60%),
+    rgba(5, 8, 12, 0.94);
+  backdrop-filter: blur(14px);
+  color: #f4f7fb;
+  font-family: 'Outfit', sans-serif;
+  overflow: auto;
+}
+
+.briefing-container.hidden {
+  display: none !important;
+}
+
+.briefing-scanlines {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%);
+  background-size: 100% 4px;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.briefing-content {
+  position: relative;
+  width: min(960px, 100%);
+  border: 1px solid rgba(255, 85, 0, 0.35);
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(20, 24, 30, 0.96), rgba(10, 12, 16, 0.98));
+  box-shadow: 0 0 40px rgba(255, 85, 0, 0.15), inset 0 0 20px rgba(255, 85, 0, 0.05);
+  padding: 32px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.briefing-header {
+  border-bottom: 1px solid rgba(255, 85, 0, 0.25);
+  padding-bottom: 16px;
+}
+
+.briefing-kicker {
+  color: #ff5500;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 3px;
+  margin: 0 0 6px;
+  text-shadow: 0 0 8px rgba(255, 85, 0, 0.6);
+}
+
+.briefing-title {
+  font-size: 38px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  margin: 0 0 4px;
+  background: linear-gradient(90deg, #ffaa00, #ff5500);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.briefing-subtitle {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 13px;
+  font-family: monospace;
+  margin: 0;
+}
+
+.briefing-body {
+  display: grid;
+  grid-template-columns: 1.1fr 1.2fr;
+  gap: 32px;
+  align-items: start;
+}
+
+@media (max-width: 768px) {
+  .briefing-body {
+    grid-template-columns: 1fr;
+  }
+}
+
+.briefing-radar-box {
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.radar-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 9px;
+  color: #ff5500;
+  font-family: monospace;
+  letter-spacing: 1px;
+  background: rgba(0,0,0,0.8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid rgba(255, 85, 0, 0.3);
+  z-index: 5;
+}
+
+.briefing-radar-box canvas {
+  max-width: 100%;
+  height: auto;
+  border-radius: 4px;
+  display: block;
+}
+
+.radar-scanline {
+  position: absolute;
+  inset: 0;
+  height: 10px;
+  background: linear-gradient(to bottom, transparent, rgba(255, 85, 0, 0.15), transparent);
+  animation: radarScan 4s linear infinite;
+  pointer-events: none;
+}
+
+@keyframes radarScan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(300px); }
+}
+
+.briefing-details {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.briefing-section h3 {
+  color: #ffaa00;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  margin: 0 0 8px;
+  border-left: 3px solid #ff5500;
+  padding-left: 8px;
+}
+
+.briefing-section p {
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.briefing-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.briefing-list li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+}
+
+.briefing-list li .bullet {
+  color: #ff5500;
+  font-size: 10px;
+}
+
+.briefing-actions {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.briefing-btn {
+  flex: 1;
+  padding: 14px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  border: 1px solid transparent;
+}
+
+.briefing-btn.primary {
+  background: linear-gradient(180deg, #ff8c00, #ff5500);
+  color: #06090c;
+  box-shadow: 0 0 20px rgba(255, 85, 0, 0.4);
+}
+
+.briefing-btn.primary:hover {
+  filter: brightness(1.15);
+  box-shadow: 0 0 30px rgba(255, 85, 0, 0.6);
+  transform: translateY(-2px);
+}
+
+.briefing-btn.secondary {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.briefing-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+/* ==========================================
+   Dialogue Overlay CSS
+   ========================================== */
+.dialogue-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(860px, calc(100% - 32px));
+  height: 180px;
+  z-index: 15000;
+  background: rgba(10, 14, 18, 0.94);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 10px;
+  box-shadow: 0 16px 50px rgba(0, 0, 0, 0.75), inset 0 0 15px rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  padding: 16px;
+  display: flex;
+  overflow: hidden;
+  animation: dialogueFlicker 0.25s infinite alternate;
+}
+
+.dialogue-container.hidden {
+  display: none !important;
+}
+
+#dialogueStaticCanvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0.12;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.dialogue-scanlines {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%);
+  background-size: 100% 3px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.dialogue-frame {
+  position: relative;
+  z-index: 3;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  gap: 20px;
+}
+
+.dialogue-portrait-wrapper {
+  position: relative;
+  width: 148px;
+  height: 148px;
+  border: 1.5px solid rgba(0, 240, 255, 0.3);
+  background: #04080c;
+  overflow: hidden;
+  border-radius: 6px;
+  flex-shrink: 0;
+}
+
+.dialogue-portrait-wrapper img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: contrast(1.1) brightness(0.9);
+}
+
+.dialogue-portrait-scanner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: rgba(0, 240, 255, 0.8);
+  box-shadow: 0 0 8px rgba(0, 240, 255, 0.8);
+  animation: scanningBeam 2.5s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes scanningBeam {
+  0% { top: 0%; }
+  50% { top: 100%; }
+  100% { top: 0%; }
+}
+
+.dialogue-content {
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.dialogue-speaker {
+  font-size: 14px;
+  font-weight: 900;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+  padding-bottom: 4px;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.dialogue-speaker.commander {
+  color: #82ffcf;
+  text-shadow: 0 0 8px rgba(130, 255, 207, 0.5);
+}
+
+.dialogue-speaker.driver {
+  color: #00f0ff;
+  text-shadow: 0 0 8px rgba(0, 240, 255, 0.5);
+}
+
+.dialogue-text {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  line-height: 1.5;
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-grow: 1;
+  margin-bottom: 8px;
+}
+
+.dialogue-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.dialogue-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-radius: 4px;
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.dialogue-btn:hover:not(.disabled):not(:disabled) {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.dialogue-btn.disabled,
+.dialogue-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+@keyframes dialogueFlicker {
+  0% { opacity: 0.97; }
+  100% { opacity: 1; }
+}
+
+/* ==========================================
+   Objective HUD CSS
+   ========================================== */
+.campaign-objective-hud {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 5;
+  background: rgba(10, 14, 18, 0.85);
+  border: 1px solid rgba(255, 85, 0, 0.4);
+  border-radius: 6px;
+  padding: 8px 20px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6), inset 0 0 10px rgba(255, 85, 0, 0.1);
+  text-align: center;
+  font-family: monospace;
+}
+
+.campaign-objective-hud.hidden {
+  display: none !important;
+}
+
+.objective-header {
+  color: #ff5500;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  margin-bottom: 2px;
+}
+
+.objective-counter {
+  color: #fff;
+  font-size: 13px;
+  font-weight: bold;
+}
+
+/* --- LOADING SCREEN --- */
+.loading-screen {
+  position: fixed;
+  inset: 0;
+  background: radial-gradient(circle at center, #0a0e14, #030508);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  opacity: 1;
+  transition: opacity 0.5s ease-in-out;
+  font-family: 'Outfit', 'Inter', monospace;
+  color: #fff;
+  overflow: hidden;
+}
+
+.loading-screen.hidden {
+  opacity: 0;
+  pointer-events: none;
+  visibility: hidden;
+}
+
+.loading-scanlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    rgba(18, 16, 16, 0) 50%,
+    rgba(0, 0, 0, 0.25) 50%
+  ), linear-gradient(
+    90deg,
+    rgba(255, 0, 0, 0.06),
+    rgba(0, 255, 0, 0.02),
+    rgba(0, 0, 255, 0.06)
+  );
+  background-size: 100% 4px, 6px 100%;
+  z-index: 2;
+}
+
+.loading-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 90%;
+  max-width: 500px;
+  padding: 40px;
+  background: rgba(10, 14, 20, 0.7);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  border-radius: 12px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8), inset 0 0 20px rgba(0, 240, 255, 0.05);
+  backdrop-filter: blur(10px);
+  position: relative;
+  z-index: 5;
+}
+
+.loading-brand {
+  text-align: center;
+  margin-bottom: 30px;
+  width: 100%;
+}
+
+.loading-title {
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: 6px;
+  color: #00f0ff;
+  text-shadow: 0 0 10px rgba(0, 240, 255, 0.4);
+  margin: 0 0 6px 0;
+  animation: loadPulse 2s infinite ease-in-out;
+}
+
+.loading-subtitle {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  color: rgba(255, 255, 255, 0.5);
+  margin: 0;
+}
+
+.loading-bar-wrapper {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.loading-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #00d9ff, #00f0ff);
+  border-radius: 3px;
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+  transition: width 0.15s ease-out;
+}
+
+.loading-bar-glitch {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(255, 255, 255, 0.2),
+    transparent
+  );
+  animation: glitchSlide 2.5s infinite linear;
+}
+
+.loading-status-text {
+  font-family: monospace;
+  font-size: 12px;
+  color: #82ffcf;
+  text-shadow: 0 0 4px rgba(130, 255, 207, 0.3);
+  margin-bottom: 25px;
+  letter-spacing: 1px;
+}
+
+.loading-details-console {
+  width: 100%;
+  font-family: monospace;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 15px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.console-line {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@keyframes loadPulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; filter: brightness(1.2); }
+}
+
+@keyframes glitchSlide {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* ── Campaign Quests HUD Panel ─────────────────────── */
+.campaign-quests {
+  position: absolute;
+  left: 22px;
+  top: 48%;
+  transform: translateY(-50%);
+  width: 210px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 85, 0, 0.25);
+  background: linear-gradient(180deg, rgba(8, 11, 13, 0.75), rgba(8, 11, 13, 0.92));
+  backdrop-filter: blur(20px);
+  border-radius: 8px;
+  box-shadow: 
+    0 16px 40px rgba(0, 0, 0, 0.5), 
+    inset 0 1px 1px rgba(255, 85, 0, 0.15),
+    0 0 15px rgba(255, 85, 0, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  pointer-events: none;
+  z-index: 10;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  font-family: monospace;
+}
+
+.campaign-quests.hidden {
+  display: none !important;
+}
+
+.quests-header {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 1.5px;
+  color: #ff5500;
+  text-shadow: 0 0 8px rgba(255, 85, 0, 0.3);
+  text-transform: uppercase;
+  border-bottom: 1px solid rgba(255, 85, 0, 0.2);
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+}
+
+.quests-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quest-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.4;
+  transition: opacity 0.3s ease;
+}
+
+.quest-item.completed {
+  color: rgba(255, 255, 255, 0.35);
+  text-decoration: line-through;
+}
+
+.quest-checkbox {
+  width: 12px;
+  height: 12px;
+  border: 1.5px solid #ff5500;
+  border-radius: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-top: 1px;
+  transition: all 0.2s ease;
+}
+
+.quest-item.completed .quest-checkbox {
+  background: #ff5500;
+  border-color: #ff5500;
+  box-shadow: 0 0 6px rgba(255, 85, 0, 0.5);
+}
+
+.quest-checkbox::after {
+  content: '';
+  width: 6px;
+  height: 3px;
+  border-left: 1.5px solid #000;
+  border-bottom: 1.5px solid #000;
+  transform: rotate(-45deg) translate(0.5px, -0.5px);
+  opacity: 0;
+}
+
+.quest-item.completed .quest-checkbox::after {
+  opacity: 1;
+}
+
+.quest-text {
+  flex-grow: 1;
+}
+
+/* Quest notification popup reminder */
+.quest-reminder-popup {
+  position: absolute;
+  top: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(10, 14, 18, 0.9);
+  border: 1.5px solid #ff5500;
+  border-radius: 6px;
+  padding: 12px 24px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8), 0 0 15px rgba(255, 85, 0, 0.2);
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+  transform: translate(-50%, -20px);
+  font-family: monospace;
+  text-align: center;
+}
+
+.quest-reminder-popup.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
+.quest-reminder-title {
+  font-size: 10px;
+  color: #ff5500;
+  font-weight: bold;
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+
+.quest-reminder-desc {
+  font-size: 13px;
+  color: #fff;
+  font-weight: bold;
+}
+
+
+
 

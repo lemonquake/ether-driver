@@ -724,5 +724,83 @@ export const mapRegistry = {
         { x: 0, z: 60, weapon: 'turret-magma-spitter' }
       );
     }
+  },
+  campaign_1: {
+    id: 'campaign_1',
+    name: 'Sector 4 - Lockdown',
+    size: 200,
+    tagline: 'OPERATION: ETHER SHIELD',
+    description: 'Infiltrate the Compound perimeter. Reclaim the exit portal by eliminating the security Static Turrets and Floating Drones.',
+    build: function (ctx, materials) {
+      const size = this.size;
+      ctx.currentMapSize = size;
+      ctx.specialTiles = [];
+      ctx.ramps = [];
+
+      // Lighting
+      const hemi = new THREE.HemisphereLight(0x7fbfff, 0x1f2f3f, 0.6);
+      ctx.scene.add(hemi);
+      const sun = new THREE.DirectionalLight(0xffab73, 0.85);
+      sun.position.set(-50, 80, 50);
+      sun.castShadow = true;
+      sun.shadow.mapSize.set(1024, 1024);
+      ctx.scene.add(sun);
+
+      // Ground
+      const ground = new THREE.Mesh(new THREE.BoxGeometry(size, 1, size), materials.concrete || materials.grass);
+      ground.position.y = -0.54;
+      ground.receiveShadow = true;
+      ground.geometry.computeBoundsTree();
+      ctx.scene.add(ground);
+      ctx.aimMeshes = [ground];
+
+      // Borders
+      addBorderWalls(ctx, size, 0xff5500, materials);
+
+      // Custom wall layout from drawing:
+      // 1. Center L-wall vertical part: x = -20, z from -50 to 100
+      // Center of vertical part: x = -20, z = 25, width = 4, depth = 150
+      addBuilding(ctx, materials, -20, 25, 4, 6, 150, materials.brick);
+
+      // 2. Center L-wall horizontal part: z = -50, x from -20 to 60
+      // Center of horizontal part: x = 20, z = -50, width = 80, depth = 4
+      addBuilding(ctx, materials, 20, -50, 80, 6, 4, materials.brick);
+
+      // 3. Left vertical wall: x = -60, z from -100 to 40
+      // Center of left vertical wall: x = -60, z = -30, width = 4, depth = 140
+      addBuilding(ctx, materials, -60, -30, 4, 6, 140, materials.brick);
+
+      // 4. Building on the right: x = 65, z = 25, width = 50, depth = 25, height = 3
+      addBuilding(ctx, materials, 65, 25, 50, 3, 25, materials.concrete);
+
+      // Add two red circles (storage tanks) on top of the building:
+      // Cylinder 1: x = 50, z = 25, radius 6, height 5
+      const tankMat = new THREE.MeshStandardMaterial({ color: 0xaa2222, metalness: 0.6, roughness: 0.2 });
+      const tankGeom = new THREE.CylinderGeometry(6, 6, 5, 16);
+      
+      const tank1 = new THREE.Mesh(tankGeom, tankMat);
+      tank1.position.set(50, 2.5 + 1.5, 25);
+      tank1.castShadow = true;
+      tank1.receiveShadow = true;
+      ctx.scene.add(tank1);
+      register(ctx, 'tank-1', 50, 25, 12, 12, 0, 0.2, 5);
+
+      const tank2 = new THREE.Mesh(tankGeom, tankMat);
+      tank2.position.set(80, 2.5 + 1.5, 25);
+      tank2.castShadow = true;
+      tank2.receiveShadow = true;
+      ctx.scene.add(tank2);
+      register(ctx, 'tank-2', 80, 25, 12, 12, 0, 0.2, 5);
+
+      // Pickups as specified in drawing:
+      // Pickable Weapon 1: x = 0, z = 75
+      // Pickable Weapon 2: x = 75, z = -15
+      // Pickable Health: x = -20, z = -75
+      ctx.pickups.push(
+        { x: 0, z: 75, weapon: 'boom-missile' },
+        { x: 75, z: -15, weapon: 'swarm-missiles' },
+        { x: -20, z: -75, weapon: 'health-kit' }
+      );
+    }
   }
 };

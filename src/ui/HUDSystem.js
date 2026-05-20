@@ -579,7 +579,7 @@ export function updateHUD(ctx, ui, dt = 0.016) {
     else if (lockState === 'acquired') ui.lockText.textContent = 'HOLD RMB TO LOCK';
     else ui.lockText.textContent = 'NO LOCK';
   }
-  if (ui.targetName) ui.targetName.textContent = target ? target.vehicle.name : '';
+  if (ui.targetName) ui.targetName.textContent = target ? (target.vehicle?.name || (target.isCampaignEnemy === 'turret' ? 'STATIC TURRET' : 'FLOATING DRONE')) : '';
   if (ui.targetRange) {
     const range = target ? Math.hypot(target.transform.x - player.transform.x, target.transform.z - player.transform.z) : 0;
     ui.targetRange.textContent = target ? `${Math.round(range)}M / ${target.health.current.toFixed(0)}HP` : '';
@@ -628,9 +628,9 @@ function updateWorldLabels(ctx, ui) {
   let childIdx = 0;
 
   for (const entity of ctx.ecs.entities) {
-    if (!entity.vehicle || !entity.health || entity.health.dead) continue;
+    if ((!entity.vehicle && !entity.isCampaignEnemy) || !entity.health || entity.health.dead) continue;
     
-    _tempVec3.set(entity.transform.x, (entity.transform.y || 0) + 2.4, entity.transform.z);
+    _tempVec3.set(entity.transform.x, (entity.transform.y || 0) + (entity.isCampaignEnemy ? 1.5 : 2.4), entity.transform.z);
     _tempVec3.project(ctx.camera);
     
     // Ignore if behind camera
@@ -660,7 +660,7 @@ function updateWorldLabels(ctx, ui) {
     el.classList.add('visible');
     
     const nameEl = el.querySelector('.world-label-name');
-    const name = entity.displayName || entity.vehicle.name;
+    const name = entity.displayName || entity.vehicle?.name || (entity.isCampaignEnemy ? (entity.isCampaignEnemy === 'turret' ? 'STATIC TURRET' : 'FLOATING DRONE') : 'TARGET');
     if (nameEl.textContent !== name) nameEl.textContent = name;
     
     const hpFill = el.querySelector('.world-label-hp-fill');

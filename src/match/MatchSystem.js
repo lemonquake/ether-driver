@@ -115,7 +115,7 @@ export function startMatch(ctx, materials, options, physics) {
   const playerTeamId = optionTeams.some((team) => team.id === options.playerTeamId) ? options.playerTeamId : optionTeams[0].id;
   const teams = optionTeams.map((team) => ({
     ...team,
-    playerCount: Math.max(1, Math.min(7, Number(team.playerCount) || 1)),
+    playerCount: options.isCampaign ? (Number(team.playerCount) || 0) : Math.max(1, Math.min(7, Number(team.playerCount) || 1)),
     isPlayerTeam: team.id === playerTeamId,
   }));
   ctx.match.active = true;

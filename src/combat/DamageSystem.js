@@ -34,7 +34,9 @@ function enqueueDamageNumber(ctx, target, amount, damageType, lethal = false) {
 
 export function applyImpactPush(target, meta) {
   if (!meta.force) return;
-  const yaw = meta.origin ? angleTo(meta.origin, target.transform) : target.transform.yaw;
+  if (target.isCampaignEnemy === 'turret') return; // Static Turrets do not move or rotate from impact
+  
+  const yaw = meta.origin ? angleTo(meta.origin, target.transform) : (target.transform.yaw || 0);
   const dir = forwardFromYaw(yaw);
   const distanceScale = meta.radius && meta.origin
     ? Math.max(0.18, 1 - distance2D(meta.origin, target.transform) / meta.radius)
@@ -44,17 +46,19 @@ export function applyImpactPush(target, meta) {
   const push = force * distanceScale;
   const sign = isAttract ? -1 : 1;
 
-  // Significant positional knockback — vehicles get truly pushed
+  // Significant positional knockback — vehicles and drones get pushed
   target.transform.x += dir.x * push * sign * 0.28;
   target.transform.z += dir.z * push * sign * 0.28;
 
-  // Speed boost from impact — makes vehicles slide/roll away
-  target.velocity.speed += push * sign * 0.55;
+  // Speed boost from impact — only if target has a velocity component
+  if (target.velocity) {
+    target.velocity.speed += push * sign * 0.55;
+  }
 
-  // Yaw perturbation — vehicles spin from impacts
-  target.transform.yaw += (Math.random() - 0.5) * 0.14 * distanceScale * (force / 5);
+  // Yaw perturbation
+  target.transform.yaw = (target.transform.yaw || 0) + (Math.random() - 0.5) * 0.14 * distanceScale * (force / 5);
 
-  // Dramatic angular destabilization — vehicles tumble and fly
+  // Dramatic angular destabilization — only if target has stability component
   if (target.stability) {
     const pitchKick = push * 0.065 * (Math.random() > 0.5 ? 1 : -1);
     const rollKick = push * 0.09 * (Math.random() > 0.5 ? 1 : -1);
@@ -76,7 +80,7 @@ export function applyImpactPush(target, meta) {
 export function applyDamage(target, amount, damageType, source, effects, meta = {}) {
   if (!target?.health || target.health.dead) return 0;
   if (target.respawn?.invulnerableTimer > 0) return 0;
-  const armor = target.vehicle.armorType;
+  const armor = target.vehicle?.armorType || 'medium';
   let finalDamage = amount * (armorMatrix[armor]?.[damageType] ?? 1);
 
   if (target.buffs?.armor && target.buffs.armor.amount > 0) {

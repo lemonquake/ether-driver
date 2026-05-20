@@ -26,6 +26,16 @@ import { premiumPartDefinitions, PREMIUM_RARITIES } from './data/premiumParts.js
 import { GARAGE_BUILD_LIMIT, clearActiveGarageTemplateId, createGarageTemplate, deleteGarageTemplate, getActiveGarageTemplateId, loadGarageTemplates, recordGarageTemplateUse, refreshGarageCatalog, renameGarageTemplate, setActiveGarageTemplateId, updateGarageTemplate } from './data/vehicleParts.js';
 
 import { weaponCatalog } from './data/weapons.js';
+import { 
+  campaignState, 
+  initCampaignMatch, 
+  updateCampaign, 
+  handleDialogueNext, 
+  handleDialoguePrev,
+  showCampaignObjectiveHUD,
+  hideCampaignObjectiveHUD,
+  startCampaignDialogue
+} from './campaign/CampaignSystem.js';
 import { getWeaponIcon } from './ui/WeaponIcons.js';
 
 const canvas = document.querySelector('#game');
@@ -2098,6 +2108,346 @@ document.getElementById('closeTemplatesButton')?.addEventListener('click', () =>
   refreshQuickTips();
 });
 
+// ── Campaign System Integration ──────────────────────────────
+async function executeMatchStartSequence(isCampaign) {
+  const loader = document.getElementById('loadingScreen');
+  const bar = document.getElementById('loadingProgressBar');
+  const status = document.getElementById('loadingStatusText');
+  const consoleLines = document.querySelectorAll('.loading-details-console .console-line');
+  
+  if (loader) loader.classList.remove('hidden');
+  if (bar) bar.style.width = '0%';
+  if (status) status.textContent = 'ESTABLISHING TACTICAL CONNECTION...';
+  
+  if (consoleLines.length >= 4) {
+    consoleLines[0].textContent = 'SYS_LOAD: AREA RADAR PERIMETER... PENDING';
+    consoleLines[1].textContent = 'SYS_LOAD: PHYSICAL STRUCTURES MAPPED... PENDING';
+    consoleLines[2].textContent = 'SYS_LOAD: SYSTEMS LINK SYNCHRONIZED... PENDING';
+    consoleLines[3].textContent = 'SYS_LOAD: SHADER PIPELINES PRE-COMPILED... PENDING';
+  }
+  
+  const updateProgress = async (pct, msg, consoleIdx = -1, consoleText = '') => {
+    if (bar) bar.style.width = pct + '%';
+    if (status) status.textContent = msg;
+    if (consoleIdx >= 0 && consoleIdx < consoleLines.length && consoleText) {
+      consoleLines[consoleIdx].textContent = consoleText;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 180));
+  };
+
+  await updateProgress(15, 'DOWNLOADING GRID ELEVATIONS...', 0, 'SYS_LOAD: AREA RADAR PERIMETER... OK');
+  
+  recordGarageTemplateUse();
+
+  // Rebuild the map geometry
+  const mapId = isCampaign ? 'campaign_1' : selectedMapId;
+  rebuildGameMap(mapId);
+  await updateProgress(35, 'COMPILING COLLISION BOUNDARIES...', 1, 'SYS_LOAD: PHYSICAL STRUCTURES MAPPED... OK');
+
+  // Start the match
+  if (isCampaign) {
+    const campaignOptions = {
+      isCampaign: true,
+      playerName: ui.playerNameInput?.value.trim() || 'Player',
+      teams: [
+        { id: 'blue', name: 'Blue Team', color: '#00f0ff', playerCount: 1, spawnIndex: 0 },
+        { id: 'red', name: 'Security Grid', color: '#ff3333', playerCount: 0, spawnIndex: 1 }
+      ],
+      playerTeamId: 'blue',
+      playerBlueprint: garageBlueprint,
+      killLimit: 0,
+      teamKillLimit: 0,
+      enabledWeapons: ['boom-missile', 'bouncy-wouncy', 'shock-lance', 'fire-mine', 'swarm-missiles', 'gravity-imploder', 'rail-slug', 'toxic-cask', 'devastator-nuke'],
+    };
+    startMatch(ctx, materials, campaignOptions, physics);
+    
+    // Override spawn point for Campaign Mode so player starts at correct position
+    const blueBase = ctx.match.bases?.find(b => b.teamId === 'blue');
+    if (blueBase) {
+      blueBase.spawnPoints = [
+        { x: 75, z: 75, yaw: -Math.PI / 2 } // Facing left
+      ];
+      
+      // Also reset the player's initial transform if it was already created by startMatch
+      if (ctx.player) {
+        ctx.player.transform.x = 75;
+        ctx.player.transform.y = 0.5;
+        ctx.player.transform.z = 75;
+        ctx.player.transform.yaw = -Math.PI / 2;
+        
+        if (ctx.player.renderable?.group) {
+          ctx.player.renderable.group.position.set(75, 0.5, 75);
+          ctx.player.renderable.group.rotation.y = -Math.PI / 2;
+        }
+        
+        if (ctx.player.rapierBody && physics) {
+          physics.setTranslation(ctx.player.rapierBody.body, 75, 0.5, 75);
+          const q = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0, 1, 0), -Math.PI / 2);
+          physics.setRotation(ctx.player.rapierBody.body, q.x, q.y, q.z, q.w);
+          physics.setLinvel(ctx.player.rapierBody.body, 0, 0, 0);
+          physics.setAngvel(ctx.player.rapierBody.body, 0, 0, 0);
+        }
+      }
+    }
+    
+    initCampaignMatch(ctx, physics);
+  } else {
+    startMatch(ctx, materials, readMatchOptions(), physics);
+  }
+  
+  await updateProgress(65, 'SYNCHRONIZING AUDIO-VISUAL EMITTERS...', 2, 'SYS_LOAD: SYSTEMS LINK SYNCHRONIZED... OK');
+
+  // Position camera correctly behind the player
+  updateCamera(0.016);
+
+  // Compile shaders
+  await updateProgress(85, 'PRE-COMPILING GRAPHICS SHADERS...', 3, 'SYS_LOAD: SHADER PIPELINES PRE-COMPILED... COMPILING');
+  try {
+    await ctx.renderer.compileAsync(ctx.scene, ctx.camera);
+  } catch (err) {
+    console.warn('compileAsync failed, using synchronous compile fallback', err);
+    try {
+      ctx.renderer.compile(ctx.scene, ctx.camera);
+    } catch (fallbackErr) {
+      console.warn('Synchronous compile fallback also failed, continuing game loop anyway', fallbackErr);
+    }
+  }
+
+  await updateProgress(100, 'TACTICAL LINK ESTABLISHED. READY TO DEPLOY.', 3, 'SYS_LOAD: SHADER PIPELINES PRE-COMPILED... OK');
+
+  // Extra brief pause at 100% for aesthetic pacing
+  await new Promise((resolve) => setTimeout(resolve, 300));
+
+  // Hide UI overlays
+  if (loader) loader.classList.add('hidden');
+  ui.matchMenu.classList.add('hidden');
+  ui.resultsOverlay.classList.remove('visible');
+  
+  ctx.input.keys.clear();
+  canvas.focus();
+
+  if (isCampaign) {
+    startCampaignDialogue();
+  }
+}
+
+async function startCampaignMatch() {
+  const briefing = document.getElementById('briefingContainer');
+  if (briefing) briefing.classList.add('hidden');
+  await executeMatchStartSequence(true);
+}
+
+function drawBriefingRadarBlueprint() {
+  const canvas = document.getElementById('briefingRadarCanvas');
+  if (!canvas) return;
+  const ctx2d = canvas.getContext('2d');
+  const w = canvas.width;
+  const h = canvas.height;
+
+  let animFrame = 0;
+  function drawFrame() {
+    if (!document.getElementById('briefingContainer') || document.getElementById('briefingContainer').classList.contains('hidden')) {
+      return;
+    }
+    
+    ctx2d.fillStyle = '#06090d';
+    ctx2d.fillRect(0, 0, w, h);
+
+    // Grid lines
+    ctx2d.strokeStyle = 'rgba(255, 85, 0, 0.08)';
+    ctx2d.lineWidth = 1;
+    for (let x = 0; x < w; x += 20) {
+      ctx2d.beginPath();
+      ctx2d.moveTo(x, 0);
+      ctx2d.lineTo(x, h);
+      ctx2d.stroke();
+    }
+    for (let y = 0; y < h; y += 20) {
+      ctx2d.beginPath();
+      ctx2d.moveTo(0, y);
+      ctx2d.lineTo(w, y);
+      ctx2d.stroke();
+    }
+
+    ctx2d.fillStyle = 'rgba(255, 85, 0, 0.5)';
+    ctx2d.font = '10px monospace';
+    ctx2d.fillText('SYS FEED: LOCKDOWN_PERIMETER_A4', 15, 20);
+
+    // Map drawing logic: map coordinates to fit inside 400x300
+    const mapX = (gx) => 50 + ((gx + 100) / 200) * 300;
+    const mapZ = (gz) => 50 + ((gz + 100) / 200) * 200;
+
+    // Draw Outer Boundary
+    ctx2d.strokeStyle = 'rgba(255, 85, 0, 0.4)';
+    ctx2d.lineWidth = 2;
+    ctx2d.strokeRect(mapX(-100), mapZ(-100), 300, 200);
+
+    // Draw Custom Walls
+    ctx2d.strokeStyle = '#ff5500';
+    ctx2d.lineWidth = 4;
+    // Center L-wall vertical part
+    ctx2d.beginPath();
+    ctx2d.moveTo(mapX(-20), mapZ(-50));
+    ctx2d.lineTo(mapX(-20), mapZ(100));
+    ctx2d.stroke();
+    // Center L-wall horizontal part
+    ctx2d.beginPath();
+    ctx2d.moveTo(mapX(-20), mapZ(-50));
+    ctx2d.lineTo(mapX(60), mapZ(-50));
+    ctx2d.stroke();
+    // Left vertical wall
+    ctx2d.beginPath();
+    ctx2d.moveTo(mapX(-60), mapZ(-100));
+    ctx2d.lineTo(mapX(-60), mapZ(40));
+    ctx2d.stroke();
+
+    // Draw Building on the right
+    ctx2d.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx2d.strokeStyle = 'rgba(255, 85, 0, 0.3)';
+    ctx2d.lineWidth = 1.5;
+    const bx = mapX(65 - 25);
+    const bz = mapZ(25 - 12.5);
+    const bw = 300 * (50 / 200);
+    const bh = 200 * (25 / 200);
+    ctx2d.fillRect(bx, bz, bw, bh);
+    ctx2d.strokeRect(bx, bz, bw, bh);
+
+    // Two storage tanks
+    ctx2d.fillStyle = 'rgba(200, 50, 50, 0.6)';
+    ctx2d.beginPath();
+    ctx2d.arc(mapX(50), mapZ(25), 8, 0, Math.PI * 2);
+    ctx2d.fill();
+    ctx2d.beginPath();
+    ctx2d.arc(mapX(80), mapZ(25), 8, 0, Math.PI * 2);
+    ctx2d.fill();
+
+    // Draw dialogue triggers (yellow gates)
+    ctx2d.strokeStyle = 'rgba(255, 220, 0, 0.8)';
+    ctx2d.lineWidth = 2;
+    ctx2d.setLineDash([4, 4]);
+    // Gate 1: x = 40, z = 50..100
+    ctx2d.beginPath(); ctx2d.moveTo(mapX(40), mapZ(50)); ctx2d.lineTo(mapX(40), mapZ(100)); ctx2d.stroke();
+    // Gate 2: x = 50, z = -50..0
+    ctx2d.beginPath(); ctx2d.moveTo(mapX(50), mapZ(-50)); ctx2d.lineTo(mapX(50), mapZ(0)); ctx2d.stroke();
+    // Gate 3: z = -50, x = -60..-20
+    ctx2d.beginPath(); ctx2d.moveTo(mapX(-60), mapZ(-50)); ctx2d.lineTo(mapX(-20), mapZ(-50)); ctx2d.stroke();
+    // Gate 4: z = 20, x = -100..-60
+    ctx2d.beginPath(); ctx2d.moveTo(mapX(-100), mapZ(20)); ctx2d.lineTo(mapX(-60), mapZ(20)); ctx2d.stroke();
+    ctx2d.setLineDash([]); // Reset
+
+    // Blinking animations
+    animFrame += 0.05;
+    const pulse = Math.abs(Math.sin(animFrame));
+
+    // Player Start: Cyan triangle pointing left
+    ctx2d.fillStyle = `rgba(0, 240, 255, ${0.4 + pulse * 0.6})`;
+    ctx2d.beginPath();
+    const px = mapX(75);
+    const pz = mapZ(75);
+    ctx2d.moveTo(px - 8, pz);
+    ctx2d.lineTo(px + 4, pz - 6);
+    ctx2d.lineTo(px + 4, pz + 6);
+    ctx2d.closePath();
+    ctx2d.fill();
+    ctx2d.font = '8px monospace';
+    ctx2d.fillStyle = '#00f0ff';
+    ctx2d.fillText('PLAYER_START', px - 25, pz + 14);
+
+    // Static Turrets: Red boxes
+    ctx2d.fillStyle = `rgba(255, 34, 34, ${0.4 + pulse * 0.6})`;
+    const turrets = [
+      { x: -10, z: -35 },
+      { x: 25, z: -35 },
+      { x: 45, z: -65 },
+    ];
+    turrets.forEach((t, index) => {
+      const tx = mapX(t.x);
+      const tz = mapZ(t.z);
+      ctx2d.fillRect(tx - 4, tz - 4, 8, 8);
+      ctx2d.fillText(`TURRET_0${index + 1}`, tx - 18, tz - 8);
+    });
+
+    // Floating Drones: Red circles
+    const drones = [
+      { x: -45, z: 60 },
+      { x: -30, z: 75 },
+    ];
+    drones.forEach((d, index) => {
+      const dx = mapX(d.x);
+      const dz = mapZ(d.z);
+      ctx2d.beginPath();
+      ctx2d.arc(dx, dz, 4, 0, Math.PI * 2);
+      ctx2d.fill();
+      ctx2d.fillText(`DRONE_0${index + 1}`, dx - 18, dz - 8);
+    });
+
+    // Exit Portal: Cyan target
+    ctx2d.strokeStyle = `rgba(0, 240, 255, ${0.4 + pulse * 0.6})`;
+    ctx2d.lineWidth = 1.5;
+    ctx2d.beginPath();
+    ctx2d.arc(mapX(-80), mapZ(-80), 8, 0, Math.PI * 2);
+    ctx2d.stroke();
+    ctx2d.beginPath();
+    ctx2d.arc(mapX(-80), mapZ(-80), 4, 0, Math.PI * 2);
+    ctx2d.stroke();
+    ctx2d.fillStyle = '#00f0ff';
+    ctx2d.fillText('EXIT_PORTAL', mapX(-80) - 25, mapZ(-80) - 12);
+
+    requestAnimationFrame(drawFrame);
+  }
+  drawFrame();
+}
+
+// Bind Campaign button
+document.getElementById('navCampaignButton')?.addEventListener('click', () => {
+  document.getElementById('mainMenuScreen')?.classList.remove('active');
+  document.getElementById('briefingContainer')?.classList.remove('hidden');
+  drawBriefingRadarBlueprint();
+});
+
+// Bind Briefing Deletion/Close/Abort
+document.getElementById('briefingCloseBtn')?.addEventListener('click', () => {
+  document.getElementById('briefingContainer')?.classList.add('hidden');
+  document.getElementById('mainMenuScreen')?.classList.add('active');
+});
+
+// Bind Briefing Deploy Button
+document.getElementById('briefingLaunchBtn')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  startCampaignMatch();
+});
+
+// Bind Dialogue Action Buttons
+document.getElementById('dialogueNextBtn')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  handleDialogueNext();
+});
+
+document.getElementById('dialoguePrevBtn')?.addEventListener('click', (e) => {
+  e.stopPropagation();
+  handleDialoguePrev();
+});
+
+// Skip/Next on Space or general window Left Click
+window.addEventListener('keydown', (event) => {
+  if (campaignState.active && campaignState.state === 'dialogue') {
+    if (event.key === ' ' || event.key === 'Spacebar') {
+      event.preventDefault();
+      handleDialogueNext();
+    }
+  }
+});
+
+window.addEventListener('click', (event) => {
+  if (campaignState.active && campaignState.state === 'dialogue') {
+    // If click was inside the dialogue container but not on prev button, advance dialogue
+    const isPrevBtn = event.target.closest('#dialoguePrevBtn');
+    if (!isPrevBtn) {
+      handleDialogueNext();
+    }
+  }
+});
+
 let pendingBuildLoadId = null;
 let editingGarageTemplateId = '';
 let garageBuildDirty = false;
@@ -2472,32 +2822,12 @@ async function beginMatch() {
   btn.disabled = true;
   btn.textContent = 'LOADING MATCH...';
 
-  // Allow the UI to update to the "LOADING MATCH..." state
-  await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
-
-  recordGarageTemplateUse();
-  rebuildGameMap(selectedMapId);
-  startMatch(ctx, materials, readMatchOptions(), physics);
-
-  // Position camera correctly behind the player
-  updateCamera(0.016);
-
   try {
-    btn.textContent = 'COMPILING SHADERS...';
-    await new Promise((resolve) => requestAnimationFrame(resolve));
-    await ctx.renderer.compileAsync(ctx.scene, ctx.camera);
-  } catch (err) {
-    console.warn('compileAsync failed, using synchronous compile fallback', err);
-    ctx.renderer.compile(ctx.scene, ctx.camera);
+    await executeMatchStartSequence(false);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
-
-  ui.matchMenu.classList.add('hidden');
-  ui.resultsOverlay.classList.remove('visible');
-  ctx.input.keys.clear();
-  canvas.focus();
-
-  btn.disabled = false;
-  btn.textContent = originalText;
 }
 
 ui.startMatchButton.addEventListener('click', beginMatch);
@@ -2517,12 +2847,23 @@ function closeMatchResults() {
 }
 
 ui.restartMatchButton.addEventListener('click', () => {
+  const isCampaign = campaignState.active;
   closeMatchResults();
-  openMenu(false);
+  if (isCampaign) {
+    startCampaignMatch();
+  } else {
+    openMenu(false);
+  }
 });
 
 ui.resultsMainMenuButton?.addEventListener('click', () => {
   closeMatchResults();
+  campaignState.active = false;
+  hideCampaignObjectiveHUD();
+  const dialogueContainer = document.getElementById('dialogueContainer');
+  if (dialogueContainer) dialogueContainer.classList.add('hidden');
+  const debugHUD = document.getElementById('campaignDebugHUD');
+  if (debugHUD) debugHUD.classList.add('hidden');
   openMainMenu();
 });
 
@@ -2717,13 +3058,28 @@ ui.closeSettingsButton.addEventListener('click', () => {
 });
 ui.restartGameButton.addEventListener('click', () => {
   togglePauseMenu(false);
-  beginMatch();
+  if (campaignState.active) {
+    startCampaignMatch();
+  } else {
+    beginMatch();
+  }
 });
 ui.mainMenuButton.addEventListener('click', () => {
   togglePauseMenu(false);
   ctx.match.active = false;
+  const isCampaign = campaignState.active;
+  campaignState.active = false;
+  hideCampaignObjectiveHUD();
+  const dialogueContainer = document.getElementById('dialogueContainer');
+  if (dialogueContainer) dialogueContainer.classList.add('hidden');
+  const debugHUD = document.getElementById('campaignDebugHUD');
+  if (debugHUD) debugHUD.classList.add('hidden');
   clearVehicles(ctx, physics);
-  openMenu(false);
+  if (isCampaign) {
+    openMainMenu();
+  } else {
+    openMenu(false);
+  }
 });
 
 ui.teamCountButtons.forEach((button) => button.addEventListener('click', () => setTeamCount(Number(button.dataset.teamCount))));
@@ -3071,6 +3427,9 @@ function animate() {
   lastFrameTime = now;
 
   updateAim(ctx, dt);
+  if (campaignState.active) {
+    updateCampaign(ctx, dt, physics);
+  }
   if (ctx.match.active && !ctx.match.paused && !ctx.match.ended) {
     updateAI(ctx, dt);
     updateVehicles(ctx, dt, effects);

@@ -379,15 +379,16 @@ export function updateWeapons(ctx, physics, dt, effects) {
 
     if (p.age > p.armTime) {
       const hit = ctx.ecs.entities.find((e) => {
-        if (!e.vehicle || e.teamId === p.teamId || e.health.dead) return false;
+        if ((!e.vehicle && !e.isCampaignEnemy) || e.teamId === p.teamId || e.health.dead) return false;
         
         // 2D distance check
         const dist2D = distance2D(e.transform, projectile.transform);
-        if (dist2D >= weapon.radius + 1.3) return false;
+        const radiusBonus = e.isCampaignEnemy ? (e.campaignEnemyType === 'turret' ? 2.5 : 1.6) : 1.3;
+        if (dist2D >= weapon.radius + radiusBonus) return false;
         
         // Vertical height overlap check
         const vehicleY = e.transform.y || 0;
-        const vehicleHeight = 1.5;
+        const vehicleHeight = e.isCampaignEnemy ? (e.campaignEnemyType === 'turret' ? 4.0 : 2.5) : 1.5;
         const projY = projectile.transform.y ?? 0.7;
         const projRadius = weapon.radius || 0.25;
         
