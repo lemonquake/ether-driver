@@ -197,9 +197,15 @@ export function updatePickups(ctx, dt) {
           if (vehicle === ctx.player && ctx.match?.killBannerQueue) {
              ctx.match.killBannerQueue.push({ line: `PICKED UP ${randomWep.name.toUpperCase()}`, color: `#${randomWep.color.toString(16).padStart(6, '0')}` });
           }
-        } else if (vehicle === ctx.player && ctx.match?.killBannerQueue) {
-          const w = weaponCatalog[pickup.pickup.weaponId];
-          ctx.match.killBannerQueue.push({ line: `PICKED UP ${w.name.toUpperCase()}`, color: `#${w.color.toString(16).padStart(6, '0')}` });
+        } else if (vehicle === ctx.player && catalogWeapon) {
+          const banner = document.getElementById('pickupBanner');
+          if (banner) {
+            banner.textContent = `PICKED UP ${catalogWeapon.name.toUpperCase()}`;
+            banner.style.color = `#${catalogWeapon.color.toString(16).padStart(6, '0')}`;
+            banner.classList.remove('show');
+            void banner.offsetWidth; // trigger reflow
+            banner.classList.add('show');
+          }
         }
         pickup.pickup.respawn = 10;
         if (vehicle.score) vehicle.score.weaponsPickedUp = (vehicle.score.weaponsPickedUp || 0) + 1;
@@ -230,11 +236,15 @@ export function updatePickups(ctx, dt) {
           const colorHex = catalogWeapon.color || 0x00f0ff;
           applyTurretEnhancementVisual(vehicle, visualStyle, colorHex, ctx);
 
-          if (vehicle === ctx.player && ctx.match?.killBannerQueue) {
-             ctx.match.killBannerQueue.push({
-               line: `UPGRADED TURRET: ${catalogWeapon.name.toUpperCase()}`,
-               color: `#${colorHex.toString(16).padStart(6, '0')}`
-             });
+          if (vehicle === ctx.player) {
+            const banner = document.getElementById('pickupBanner');
+            if (banner) {
+              banner.textContent = `UPGRADED TURRET: ${catalogWeapon.name.toUpperCase()}`;
+              banner.style.color = `#${colorHex.toString(16).padStart(6, '0')}`;
+              banner.classList.remove('show');
+              void banner.offsetWidth;
+              banner.classList.add('show');
+            }
           }
 
           pickup.pickup.respawn = 10;
@@ -251,8 +261,15 @@ export function updatePickups(ctx, dt) {
           ammo: catalogWeapon ? catalogWeapon.ammo : 4,
           cooldown: 0,
         };
-        if (vehicle === ctx.player && ctx.match?.killBannerQueue && catalogWeapon) {
-           ctx.match.killBannerQueue.push({ line: `PICKED UP ${catalogWeapon.name.toUpperCase()}`, color: `#${catalogWeapon.color.toString(16).padStart(6, '0')}` });
+        if (vehicle === ctx.player && catalogWeapon) {
+           const banner = document.getElementById('pickupBanner');
+           if (banner) {
+             banner.textContent = `PICKED UP ${catalogWeapon.name.toUpperCase()}`;
+             banner.style.color = `#${catalogWeapon.color.toString(16).padStart(6, '0')}`;
+             banner.classList.remove('show');
+             void banner.offsetWidth;
+             banner.classList.add('show');
+           }
         }
         pickup.pickup.respawn = 10;
         if (vehicle.score) vehicle.score.weaponsPickedUp = (vehicle.score.weaponsPickedUp || 0) + 1;

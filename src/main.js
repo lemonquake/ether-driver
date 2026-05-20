@@ -2923,7 +2923,7 @@ setupInput(ctx, {
     ui.hud.classList.toggle('hud-full', full);
   },
   onKeyDown(code) {
-    if (code === 'Tab') {
+    if (code === 'KeyT') {
       ctx.match.scoreboardOpen = !ctx.match.scoreboardOpen;
       return;
     }

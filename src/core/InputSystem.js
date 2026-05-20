@@ -13,7 +13,7 @@ export function setupInput(ctx, handlers = {}) {
     const editingText = ['INPUT', 'SELECT', 'TEXTAREA'].includes(event.target?.tagName);
     if (editingText) return;
     const code = keyCode(event);
-    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyQ', 'KeyE', 'KeyX', 'Tab'].includes(code)) event.preventDefault();
+    if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'KeyQ', 'KeyE', 'KeyX', 'KeyT'].includes(code)) event.preventDefault();
     input.keys.add(code);
     if (code === 'KeyH' && !event.repeat) {
       input.hudFull = !input.hudFull;
