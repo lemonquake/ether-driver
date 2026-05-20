@@ -2244,6 +2244,11 @@ function drawBriefingRadarBlueprint() {
   const w = canvas.width;
   const h = canvas.height;
 
+  // Prevent duplicate overlapping animation loops
+  if (window.briefingRadarAnimId) {
+    cancelAnimationFrame(window.briefingRadarAnimId);
+  }
+
   let animFrame = 0;
   function drawFrame() {
     if (!document.getElementById('briefingContainer') || document.getElementById('briefingContainer').classList.contains('hidden')) {
@@ -2321,6 +2326,218 @@ function drawBriefingRadarBlueprint() {
     ctx2d.arc(mapX(80), mapZ(25), 8, 0, Math.PI * 2);
     ctx2d.fill();
 
+    // Increment local animation frame ticks
+    animFrame += 0.035;
+    const pulse = Math.abs(Math.sin(animFrame * 1.5));
+
+    // --- SAGGING OVERHEAD CATENARY WIRE RAILS ---
+    ctx2d.strokeStyle = 'rgba(255, 85, 0, 0.28)';
+    ctx2d.lineWidth = 1.0;
+    // Cable 1: Generator (40, 65) to Center L-Wall (-20, 65)
+    ctx2d.beginPath();
+    ctx2d.moveTo(mapX(40), mapZ(65));
+    ctx2d.quadraticCurveTo(mapX(10), mapZ(65) + 16, mapX(-20), mapZ(65));
+    ctx2d.stroke();
+    // Cable 2: Generator (40, 65) to Building Roof (65, 37.5)
+    ctx2d.beginPath();
+    ctx2d.moveTo(mapX(40), mapZ(65));
+    ctx2d.quadraticCurveTo(mapX(52.5), mapZ(51.25) + 14, mapX(65), mapZ(37.5));
+    ctx2d.stroke();
+
+    // --- STEAM VENT GRATES & BURNING BARRELS ---
+    const vents = [
+      { x: 10, z: 55 },
+      { x: -45, z: 25 },
+      { x: -75, z: -25 }
+    ];
+    ctx2d.fillStyle = 'rgba(255, 255, 255, 0.22)';
+    vents.forEach((v) => {
+      const vx = mapX(v.x);
+      const vz = mapZ(v.z);
+      ctx2d.fillRect(vx - 2, vz - 2, 4, 4);
+      
+      // Expanding steam ring
+      const steamPuff = (animFrame * 0.9 + (v.x + 100) * 0.05) % 1.0;
+      ctx2d.strokeStyle = `rgba(200, 200, 200, ${0.32 * (1.0 - steamPuff)})`;
+      ctx2d.lineWidth = 1;
+      ctx2d.beginPath();
+      ctx2d.arc(vx, vz, 2 + steamPuff * 14, 0, Math.PI * 2);
+      ctx2d.stroke();
+    });
+
+    // Burning fuel barrel at (-35, 45)
+    const fxBarrel = mapX(-35);
+    const fzBarrel = mapZ(45);
+    const firePulse = 0.5 + Math.sin(animFrame * 7.0) * 0.4;
+    ctx2d.fillStyle = `rgba(255, 80, 0, ${0.45 + firePulse * 0.35})`;
+    ctx2d.beginPath();
+    ctx2d.arc(fxBarrel, fzBarrel, 4, 0, Math.PI * 2);
+    ctx2d.fill();
+    ctx2d.fillStyle = '#ffaa00';
+    ctx2d.font = '6px monospace';
+    ctx2d.fillText('BURN_BARREL', fxBarrel - 18, fzBarrel - 6);
+
+    // --- MALFUNCTIONING REACTOR CORE GENERATOR ---
+    const genX = mapX(40);
+    const genZ = mapZ(65);
+    const genFlicker = 0.5 + Math.sin(animFrame * 8) * 0.3 + (Math.random() < 0.1 ? 0.4 : 0);
+    ctx2d.fillStyle = `rgba(255, 160, 0, ${0.18 * genFlicker})`;
+    ctx2d.beginPath();
+    ctx2d.arc(genX, genZ, 14, 0, Math.PI * 2);
+    ctx2d.fill();
+
+    ctx2d.fillStyle = '#ffaa00';
+    ctx2d.fillRect(genX - 4, genZ - 4, 8, 8);
+    ctx2d.strokeStyle = '#ffffff';
+    ctx2d.lineWidth = 1;
+    ctx2d.strokeRect(genX - 4, genZ - 4, 8, 8);
+    ctx2d.fillStyle = '#ffcc00';
+    ctx2d.font = '7px monospace';
+    ctx2d.fillText('GEN_CORE', genX - 16, genZ + 14);
+
+    // --- ACTIVE WATCHTOWERS & CYAN VOLUMETRIC SPOTLIGHTS ---
+    const watchtowers = [
+      { x: -40, z: -20, baseAngle: 0, speed: 0.75 },
+      { x: -80, z: 60, baseAngle: Math.PI, speed: 1.0 }
+    ];
+    watchtowers.forEach((wt) => {
+      const wtx = mapX(wt.x);
+      const wtz = mapZ(wt.z);
+      
+      // Sweep spotlight target angle calculation synchronized with 3D math
+      const localTime = animFrame * wt.speed;
+      const sweepAngle = wt.baseAngle + Math.sin(localTime) * 0.7;
+      const angle2D = Math.atan2(Math.cos(sweepAngle), Math.sin(sweepAngle));
+
+      // Draw volumetric spotlight cone wedge (35px visual range)
+      ctx2d.fillStyle = 'rgba(0, 240, 255, 0.14)';
+      ctx2d.beginPath();
+      ctx2d.moveTo(wtx, wtz);
+      ctx2d.arc(wtx, wtz, 38, angle2D - 0.28, angle2D + 0.28);
+      ctx2d.closePath();
+      ctx2d.fill();
+
+      // Spotlight edge lines
+      ctx2d.strokeStyle = 'rgba(0, 240, 255, 0.08)';
+      ctx2d.lineWidth = 1;
+      ctx2d.beginPath();
+      ctx2d.moveTo(wtx, wtz);
+      ctx2d.lineTo(wtx + Math.cos(angle2D - 0.28) * 38, wtz + Math.sin(angle2D - 0.28) * 38);
+      ctx2d.moveTo(wtx, wtz);
+      ctx2d.lineTo(wtx + Math.cos(angle2D + 0.28) * 38, wtz + Math.sin(angle2D + 0.28) * 38);
+      ctx2d.stroke();
+
+      // Watchtower physical node dot
+      ctx2d.fillStyle = '#00f0ff';
+      ctx2d.beginPath();
+      ctx2d.arc(wtx, wtz, 4.2, 0, Math.PI * 2);
+      ctx2d.fill();
+      ctx2d.strokeStyle = '#06090d';
+      ctx2d.stroke();
+    });
+
+    // --- RADIOACTIVE NEON GREEN CHEMICAL SLAG LEAKS ---
+    const puddles = [
+      { x: 35, z: 15, r: 6.0 },
+      { x: 55, z: 5, r: 7.2 },
+      { x: 65, z: -15, r: 8.5 }
+    ];
+    puddles.forEach((p) => {
+      const px = mapX(p.x);
+      const pz = mapZ(p.z);
+      const pr = p.r * 1.5; // Translate 3D radius size to pixels
+
+      // Glowing acid halo pulses
+      const slagPulse = 0.7 + Math.sin(animFrame * 2.5 + p.x) * 0.3;
+      ctx2d.fillStyle = `rgba(57, 255, 20, ${0.12 * slagPulse})`;
+      ctx2d.beginPath();
+      ctx2d.arc(px, pz, pr + 4.5, 0, Math.PI * 2);
+      ctx2d.fill();
+
+      // Acid core
+      ctx2d.fillStyle = 'rgba(57, 255, 20, 0.35)';
+      ctx2d.strokeStyle = 'rgba(57, 255, 20, 0.75)';
+      ctx2d.lineWidth = 1.5;
+      ctx2d.beginPath();
+      ctx2d.arc(px, pz, pr, 0, Math.PI * 2);
+      ctx2d.fill();
+      ctx2d.stroke();
+    });
+    ctx2d.fillStyle = '#39ff14';
+    ctx2d.font = '8px monospace';
+    ctx2d.fillText('SLAG_LEAK', mapX(50) - 20, mapZ(15) - 10);
+
+    // --- HIGH VOLTAGE PLASMA ARCS (FENCES) ---
+    const fences = [
+      { x1: -95, z1: -10, x2: -60, z2: -10 },
+      { x1: -20, z1: -75, x2: 20, z2: -75 }
+    ];
+    fences.forEach((f) => {
+      const fx1 = mapX(f.x1);
+      const fz1 = mapZ(f.z1);
+      const fx2 = mapX(f.x2);
+      const fz2 = mapZ(f.z2);
+
+      // Draw two cyan pole terminals
+      ctx2d.fillStyle = '#00ffff';
+      ctx2d.beginPath(); ctx2d.arc(fx1, fz1, 3.2, 0, Math.PI * 2); ctx2d.fill();
+      ctx2d.beginPath(); ctx2d.arc(fx2, fz2, 3.2, 0, Math.PI * 2); ctx2d.fill();
+      ctx2d.strokeStyle = '#06090d';
+      ctx2d.lineWidth = 1.0;
+      ctx2d.beginPath(); ctx2d.arc(fx1, fz1, 3.2, 0, Math.PI * 2); ctx2d.stroke();
+      ctx2d.beginPath(); ctx2d.arc(fx2, fz2, 3.2, 0, Math.PI * 2); ctx2d.stroke();
+
+      // Neon plasma lightning crackling
+      const plasmaActive = Math.random() < 0.88;
+      if (plasmaActive) {
+        ctx2d.strokeStyle = `rgba(0, 240, 255, ${0.68 + Math.random() * 0.32})`;
+        ctx2d.lineWidth = 2.0;
+        ctx2d.shadowColor = '#00ffff';
+        ctx2d.shadowBlur = 6;
+        ctx2d.setLineDash([3, 4]);
+        ctx2d.beginPath();
+        ctx2d.moveTo(fx1, fz1);
+        ctx2d.lineTo(fx2, fz2);
+        ctx2d.stroke();
+        ctx2d.setLineDash([]); // Reset dash
+        ctx2d.shadowBlur = 0; // Reset shadow
+        
+        ctx2d.fillStyle = '#00ffff';
+        ctx2d.font = '6px monospace';
+        ctx2d.fillText('PLASMA_GATE', (fx1 + fx2) / 2 - 16, (fz1 + fz2) / 2 - 6);
+      }
+    });
+
+    // --- SECTOR WARDEN HEAVY MECH PRE-DEPLOY WARNING ---
+    const bossX = mapX(-80);
+    const bossZ = mapZ(-50);
+    const bossPulse = 0.5 + Math.sin(animFrame * 4.0) * 0.5;
+    
+    // Threat circle
+    ctx2d.fillStyle = `rgba(255, 34, 34, ${0.12 * bossPulse})`;
+    ctx2d.beginPath();
+    ctx2d.arc(bossX, bossZ, 18, 0, Math.PI * 2);
+    ctx2d.fill();
+    ctx2d.strokeStyle = 'rgba(255, 34, 34, 0.65)';
+    ctx2d.lineWidth = 1.5;
+    ctx2d.beginPath();
+    ctx2d.arc(bossX, bossZ, 10, 0, Math.PI * 2);
+    ctx2d.stroke();
+
+    // Crosshairs hazard warning
+    ctx2d.strokeStyle = '#ff2222';
+    ctx2d.lineWidth = 1.8;
+    ctx2d.beginPath();
+    ctx2d.moveTo(bossX - 6, bossZ - 6);
+    ctx2d.lineTo(bossX + 6, bossZ + 6);
+    ctx2d.moveTo(bossX + 6, bossZ - 6);
+    ctx2d.lineTo(bossX - 6, bossZ + 6);
+    ctx2d.stroke();
+
+    ctx2d.fillStyle = '#ff2222';
+    ctx2d.font = 'bold 8px monospace';
+    ctx2d.fillText('WARNING: SEC_WARDEN_AI', bossX - 48, bossZ - 14);
+
     // Draw dialogue triggers (yellow gates)
     ctx2d.strokeStyle = 'rgba(255, 220, 0, 0.8)';
     ctx2d.lineWidth = 2;
@@ -2334,10 +2551,6 @@ function drawBriefingRadarBlueprint() {
     // Gate 4: z = 20, x = -100..-60
     ctx2d.beginPath(); ctx2d.moveTo(mapX(-100), mapZ(20)); ctx2d.lineTo(mapX(-60), mapZ(20)); ctx2d.stroke();
     ctx2d.setLineDash([]); // Reset
-
-    // Blinking animations
-    animFrame += 0.05;
-    const pulse = Math.abs(Math.sin(animFrame));
 
     // Player Start: Cyan triangle pointing left
     ctx2d.fillStyle = `rgba(0, 240, 255, ${0.4 + pulse * 0.6})`;
@@ -2393,7 +2606,7 @@ function drawBriefingRadarBlueprint() {
     ctx2d.fillStyle = '#00f0ff';
     ctx2d.fillText('EXIT_PORTAL', mapX(-80) - 25, mapZ(-80) - 12);
 
-    requestAnimationFrame(drawFrame);
+    window.briefingRadarAnimId = requestAnimationFrame(drawFrame);
   }
   drawFrame();
 }

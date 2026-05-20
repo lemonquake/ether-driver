@@ -64,7 +64,7 @@ export function fireWeapon(ctx, physics, owner, slotName, targetPoint, effects) 
     }
     if (weapon.homingStrength && !isPlayerControlled && !homingTarget) {
       let bestDist = Infinity;
-      for (const e of ctx.ecs.entities.filter((v) => v.vehicle && !v.health.dead && v.teamId !== owner.teamId)) {
+      for (const e of ctx.ecs.entities.filter((v) => (v.vehicle || v.isCampaignEnemy) && !v.health.dead && v.teamId !== owner.teamId)) {
         const d = distance2D(start, e.transform);
         if (d < 150) {
           let diff = Math.abs(aimYawSpread - angleTo(start, e.transform));
@@ -165,7 +165,7 @@ function explode(ctx, projectile, effects, physics) {
     const entities = ctx.ecs.entities;
     for (let i = 0; i < entities.length; i += 1) {
       const target = entities[i];
-      if (!target.vehicle || target.health.dead) continue;
+      if ((!target.vehicle && !target.isCampaignEnemy) || target.health.dead) continue;
       const d = distance2D(projectile.transform, target.transform);
       if (d <= weapon.splashRadius) {
         const force = weapon.explosionForce || weapon.impactForce || 0;
@@ -196,6 +196,7 @@ export function findProjectileWorldHit(ctx, projectile) {
   const obb = makeObb(projectile.transform.x, projectile.transform.z, probeSize, probeSize, projectile.transform.yaw || 0);
   const projY = projectile.transform.y ?? 0.7;
   const nearbyShapes = ctx.collisionShapes.filter((shape) => {
+    if (shape.isCampaignEnemy) return false;
     let obstacleHeight = shape.height !== undefined && shape.height > 0 ? shape.height : 0;
     if (obstacleHeight === 0) {
       if (shape.type === 'wall' || shape.type === 'building') {
@@ -353,7 +354,7 @@ export function updateWeapons(ctx, physics, dt, effects) {
     }
     projectile.transform.x += projectile.velocity.x * dt;
     projectile.transform.z += projectile.velocity.z * dt;
-    projectile.transform.y = projectile.transform.y ?? 0.7;
+    projectile.transform.y = (projectile.transform.y ?? 0.7) + (projectile.velocity.y || 0) * dt;
     projectile.renderable.group.position.set(projectile.transform.x, projectile.transform.y, projectile.transform.z);
     if (p.pointLight) {
       p.pointLight.position.set(projectile.transform.x, projectile.transform.y, projectile.transform.z);
@@ -383,12 +384,28 @@ export function updateWeapons(ctx, physics, dt, effects) {
         
         // 2D distance check
         const dist2D = distance2D(e.transform, projectile.transform);
-        const radiusBonus = e.isCampaignEnemy ? (e.campaignEnemyType === 'turret' ? 2.5 : 1.6) : 1.3;
+        let radiusBonus = 1.3;
+        if (e.isCampaignEnemy) {
+          if (e.campaignEnemyType === 'turret') radiusBonus = 2.5;
+          else if (e.campaignEnemyType === 'boss') radiusBonus = 3.2;
+          else radiusBonus = 1.6;
+        }
         if (dist2D >= weapon.radius + radiusBonus) return false;
         
         // Vertical height overlap check
-        const vehicleY = e.transform.y || 0;
-        const vehicleHeight = e.isCampaignEnemy ? (e.campaignEnemyType === 'turret' ? 4.0 : 2.5) : 1.5;
+        let vehicleY = e.transform.y || 0;
+        let vehicleHeight = 1.5;
+        if (e.isCampaignEnemy) {
+          if (e.campaignEnemyType === 'turret') {
+            vehicleHeight = 4.0;
+          } else if (e.campaignEnemyType === 'boss') {
+            vehicleHeight = 6.0;
+            vehicleY = 0; // Allow boss to be hit from ground level up to its height
+          } else if (e.campaignEnemyType === 'drone') {
+            vehicleHeight = 3.5;
+            vehicleY = 0; // Allow drones to be hit from ground level up to their height
+          }
+        }
         const projY = projectile.transform.y ?? 0.7;
         const projRadius = weapon.radius || 0.25;
         

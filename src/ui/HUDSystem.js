@@ -845,13 +845,13 @@ export function drawMinimap(ctx, ui, dt) {
 
   // Vehicles
   const time = performance.now() * 0.001;
-  for (const vehicle of ctx.ecs.entities.filter((e) => e.vehicle && !e.health.dead)) {
+  for (const vehicle of ctx.ecs.entities.filter((e) => (e.vehicle || e.isCampaignEnemy) && !e.health.dead)) {
     const isPlayer = vehicle === player;
     m.save();
     m.translate(vehicle.transform.x, vehicle.transform.z);
     m.rotate(-vehicle.transform.yaw);
 
-    const color = vehicle.teamColor || '#82ffcf';
+    const color = vehicle.teamColor || '#ff3333';
 
     // Pulse for non-player vehicles
     if (!isPlayer) {

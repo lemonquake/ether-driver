@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { distance2D } from '../core/collision.js';
+import { distance2D, makeObb, findObbCollision } from '../core/collision.js';
 import { applyDamage } from '../combat/DamageSystem.js';
 import { register } from '../world/MapSystem.js';
 
@@ -20,6 +20,7 @@ export const campaignState = {
   dialogueCharIndex: 0,
   dialogueTextTimer: 0,
   dialogueTyping: false,
+  dialogueDelay: 0,
   onDialogueComplete: null,
 };
 
@@ -42,11 +43,14 @@ const dialogues = [
   ],
   // Sequence 3: Approaching Exit Portal (Gate 4)
   [
-    { speaker: 'COMMANDER', portrait: 'textures/commander_portrait.png', text: 'The extraction zone is just ahead. Once all hostiles are offline, the portal will stabilize. Secure the perimeter!' }
+    { speaker: 'COMMANDER', portrait: 'textures/commander_portrait.png', text: 'Wait... Energy spikes are off the charts near the extraction portal! Something massive is warping in!' },
+    { speaker: 'COMMANDER', portrait: 'textures/commander_portrait.png', text: 'It\'s the SECTOR WARDEN heavy combat Mech! It is armed with dual sweeping gatling lasers and proximity EMP mines!' },
+    { speaker: 'WARDEN AI', portrait: 'textures/commander_portrait.png', text: 'WARNING: MAXIMUM LOCKDOWN SECURITY ACTIVE. HOSTILE RACER CORRUPTING COMPILER PERIMETER. INITIALIZING PURGE PROTOCOL.' }
   ],
   // Sequence 4: All Enemies Dead (Portal Active)
   [
-    { speaker: 'COMMANDER', portrait: 'textures/commander_portrait.png', text: 'All hostiles neutralized! The exit portal is fully active at the top-left coordinates (-80, -80). Get to extraction, now!' }
+    { speaker: 'COMMANDER', portrait: 'textures/commander_portrait.png', text: 'Incredible! The Sector Warden has been completely dismantled. Security overrides are disabled.' },
+    { speaker: 'COMMANDER', portrait: 'textures/commander_portrait.png', text: 'The exit portal at coordinates (-80, -80) is now stable! Get through it and escape Sector 4 before reinforcements arrive!' }
   ]
 ];
 
@@ -238,6 +242,7 @@ function spawnStaticTurret(ctx, x, z) {
     r: 0,
     padding: 0.25,
     height: 3.0,
+    isCampaignEnemy: true,
   };
   ctx.collisionShapes.push(coll);
 
@@ -269,6 +274,19 @@ function spawnFloatingDrone(ctx, x, z, physics) {
   // Create kinematic sensor or body in physics so standard things could sweep (though we handle movement via JS translation)
   const sensor = physics.createSensorSphere(1.2, x, 2.0, z);
 
+  const coll = {
+    type: 'drone',
+    x,
+    z,
+    w: 2.4,
+    d: 2.4,
+    r: 0,
+    padding: 0.25,
+    height: 3.5,
+    isCampaignEnemy: true,
+  };
+  ctx.collisionShapes.push(coll);
+
   const entity = {
     id: `campaign-drone-${campaignState.enemies.length}`,
     isCampaignEnemy: true,
@@ -284,6 +302,7 @@ function spawnFloatingDrone(ctx, x, z, physics) {
     rapierBody: sensor,
     cooldown: 0.5 + Math.random(),
     patrolAngle: Math.random() * Math.PI * 2,
+    collisionShapeRef: coll,
   };
 
   ctx.ecs.add(entity);
@@ -305,9 +324,14 @@ export function spawnEnemyBullet(ctx, physics, startX, startY, startZ, yaw, targ
 
   const dx = targetPoint.x - startX;
   const dz = targetPoint.z - startZ;
+  const targetY = targetPoint.y !== undefined ? targetPoint.y + 0.75 : 0.75;
+  const dy = targetY - startY;
+  const dist3D = Math.hypot(dx, dy, dz) || 1.0;
+  
+  const dirX = dx / dist3D;
+  const dirY = dy / dist3D;
+  const dirZ = dz / dist3D;
   const aimYaw = Math.atan2(dx, dz);
-  const dirX = Math.sin(aimYaw);
-  const dirZ = Math.cos(aimYaw);
 
   let mesh;
   if (ctx.projectileMeshPool && ctx.projectileMeshPool.length > 0) {
@@ -349,7 +373,7 @@ export function spawnEnemyBullet(ctx, physics, startX, startY, startZ, yaw, targ
       pointLight: pLight,
     },
     transform: { x: startX, y: startY, z: startZ, yaw: aimYaw },
-    velocity: { x: dirX * weapon.speed, y: 0, z: dirZ * weapon.speed },
+    velocity: { x: dirX * weapon.speed, y: dirY * weapon.speed, z: dirZ * weapon.speed },
     renderable: { group: mesh },
     rapierBody: rapier,
   });
@@ -363,6 +387,13 @@ export function initCampaignMatch(ctx, physics) {
   campaignState.enemies = [];
   campaignState.portalActive = false;
   campaignState.activeGateIndex = -1;
+  campaignState.bossSpawned = false;
+  campaignState.bossDefeated = false;
+  campaignState.debugTimer = 0;
+
+  // Clear boss UI
+  const oldBossContainer = document.getElementById('bossHealthBarContainer');
+  if (oldBossContainer) oldBossContainer.remove();
 
   // Clear any existing campaign portal
   if (campaignState.portalMesh) {
@@ -396,6 +427,7 @@ export function initCampaignMatch(ctx, physics) {
     });
     const mesh = new THREE.Mesh(gateGeom, gateMat);
     mesh.position.set(cx, 0.1, cz);
+    mesh.visible = false; // Dialogue triggers are invisible to the player
     ctx.scene.add(mesh);
     gate.mesh = mesh;
   });
@@ -432,6 +464,87 @@ export function startCampaignDialogue() {
 }
 
 // Dialogue Actions
+let typingSynth = null;
+let interfaceSynth = null;
+
+function getTypingSynth() {
+  if (typingSynth) return typingSynth;
+  if (window.Tone) {
+    try {
+      typingSynth = new window.Tone.MonoSynth({
+        oscillator: { type: "square" },
+        envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.03 },
+        filter: { Q: 1, type: "lowpass", frequency: 1200 },
+        filterEnvelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.03 }
+      }).toDestination();
+      typingSynth.volume.value = -28; // Subtle mechanical terminal ticks
+    } catch (e) {
+      console.warn("[CampaignSystem] Error creating typing synth:", e);
+    }
+  }
+  return typingSynth;
+}
+
+function getInterfaceSynth() {
+  if (interfaceSynth) return interfaceSynth;
+  if (window.Tone) {
+    try {
+      interfaceSynth = new window.Tone.PolySynth(window.Tone.Synth).toDestination();
+      interfaceSynth.set({
+        oscillator: { type: "triangle" },
+        envelope: { attack: 0.005, decay: 0.1, sustain: 0, release: 0.1 }
+      });
+      interfaceSynth.volume.value = -18; // Clean UI sound volume
+    } catch (e) {
+      console.warn("[CampaignSystem] Error creating interface synth:", e);
+    }
+  }
+  return interfaceSynth;
+}
+
+function playTypingSound(charIndex) {
+  if (charIndex % 2 !== 0) return;
+  const synth = getTypingSynth();
+  if (synth && window.Tone.context && window.Tone.context.state === 'running') {
+    try {
+      const pitch = 900 + Math.random() * 300;
+      synth.triggerAttackRelease(pitch, "64n");
+    } catch (e) {}
+  }
+}
+
+function playInterfaceSound(type) {
+  const synth = getInterfaceSynth();
+  if (synth && window.Tone.context && window.Tone.context.state === 'running') {
+    try {
+      if (type === 'next') {
+        synth.triggerAttackRelease(["E5", "G5"], "16n");
+      } else if (type === 'prev') {
+        synth.triggerAttackRelease(["G4", "E4"], "16n");
+      } else if (type === 'close') {
+        synth.triggerAttackRelease(["C5", "C4"], "8n");
+      } else if (type === 'open') {
+        synth.triggerAttackRelease(["C4", "G4", "C5"], "8n");
+      }
+    } catch (e) {}
+  }
+}
+
+function handleDialogueKeyDown(e) {
+  if (campaignState.state !== 'dialogue') return;
+  
+  if (e.key === 'Escape') {
+    e.preventDefault();
+    closeDialogue();
+  } else if (e.key === 'Enter') {
+    e.preventDefault();
+    handleDialogueNext();
+  } else if (e.key === 'Backspace' || e.key === 'ArrowLeft') {
+    e.preventDefault();
+    handleDialoguePrev();
+  }
+}
+
 export function triggerDialogueSequence(index, onComplete = null) {
   console.log(`[CampaignSystem] triggerDialogueSequence called with index: ${index}`);
   campaignState.dialogueSequence = dialogues[index] || [];
@@ -449,16 +562,21 @@ export function triggerDialogueSequence(index, onComplete = null) {
 }
 
 function showDialogueBox() {
+  console.log('[CampaignSystem] showDialogueBox called');
+  
+  // Inject/recreate the dialogue structure
+  injectDialogueHTML();
+  
   const container = document.getElementById('dialogueContainer');
-  console.log('[CampaignSystem] showDialogueBox called. container found:', container);
-  if (!container) {
-    console.log('[CampaignSystem] container not found in DOM, calling injectDialogueHTML');
-    injectDialogueHTML();
-    showDialogueBox();
-    return;
+  if (container) {
+    container.classList.remove('hidden');
   }
-  console.log('[CampaignSystem] Removing "hidden" class from dialogue container');
-  container.classList.remove('hidden');
+  
+  // Bind escape/arrows key listeners
+  window.removeEventListener('keydown', handleDialogueKeyDown);
+  window.addEventListener('keydown', handleDialogueKeyDown);
+  
+  playInterfaceSound('open');
   startTypingLine();
 }
 
@@ -471,28 +589,42 @@ function startTypingLine() {
     return;
   }
 
-  // Sync Portrait & Name
+  const container = document.getElementById('dialogueContainer');
   const portraitEl = document.getElementById('dialoguePortrait');
   const speakerEl = document.getElementById('dialogueSpeaker');
   const textEl = document.getElementById('dialogueText');
-  console.log('[CampaignSystem] Synced portrait, speaker, text elements:', { portraitEl, speakerEl, textEl });
+
+  const oldSpeaker = speakerEl ? speakerEl.textContent : '';
+  const isSpeakerChanged = oldSpeaker && oldSpeaker !== line.speaker;
+
+  if (container) {
+    container.className = 'dialogue-container';
+    container.classList.add(`speaker-${line.speaker.toLowerCase()}`);
+    container.classList.add('is-typing');
+  }
 
   if (portraitEl) {
     portraitEl.src = line.portrait;
-    console.log(`[CampaignSystem] Portrait source set to: ${line.portrait}`);
   }
   if (speakerEl) {
     speakerEl.textContent = line.speaker;
-    speakerEl.className = `dialogue-speaker ${line.speaker.toLowerCase()}`;
-    console.log(`[CampaignSystem] Speaker set to: ${line.speaker}`);
+  }
+
+  // Visual portrait glitch sweep on speaker change
+  const glitchEl = container ? container.querySelector('.dialogue-portrait-glitch') : null;
+  if (glitchEl && isSpeakerChanged) {
+    glitchEl.style.opacity = '0.7';
+    setTimeout(() => {
+      glitchEl.style.opacity = '0';
+    }, 150);
   }
   
   campaignState.dialogueCharIndex = 0;
   campaignState.dialogueTextTimer = 0;
+  campaignState.dialogueDelay = 0;
   campaignState.dialogueTyping = true;
   if (textEl) textEl.textContent = '';
   
-  // Sync buttons
   syncDialogueButtons();
 }
 
@@ -517,11 +649,17 @@ export function handleDialogueNext() {
       const textEl = document.getElementById('dialogueText');
       if (textEl) textEl.textContent = line.text;
       campaignState.dialogueTyping = false;
+      
+      const container = document.getElementById('dialogueContainer');
+      if (container) container.classList.remove('is-typing');
+      
+      playInterfaceSound('next');
     }
   } else {
     // Next slide
     if (campaignState.dialogueIndex < campaignState.dialogueSequence.length - 1) {
       campaignState.dialogueIndex++;
+      playInterfaceSound('next');
       startTypingLine();
     } else {
       closeDialogue();
@@ -532,54 +670,111 @@ export function handleDialogueNext() {
 export function handleDialoguePrev() {
   if (campaignState.dialogueIndex > 0) {
     campaignState.dialogueIndex--;
+    playInterfaceSound('prev');
     startTypingLine();
     // Complete typing immediately for history review
     const line = campaignState.dialogueSequence[campaignState.dialogueIndex];
     const textEl = document.getElementById('dialogueText');
     if (line && textEl) textEl.textContent = line.text;
     campaignState.dialogueTyping = false;
+    
+    const container = document.getElementById('dialogueContainer');
+    if (container) container.classList.remove('is-typing');
   }
 }
 
 function closeDialogue() {
   console.log('[CampaignSystem] closeDialogue called');
   const container = document.getElementById('dialogueContainer');
+  
+  window.removeEventListener('keydown', handleDialogueKeyDown);
+  
   if (container) {
-    console.log('[CampaignSystem] Adding "hidden" class to dialogue container');
-    container.classList.add('hidden');
-  }
-  campaignState.state = 'playing';
-  if (ctxRef) {
-    console.log('[CampaignSystem] Unpausing match physics/updates');
-    ctxRef.match.paused = false; // Unpause match loop
-  }
-  if (campaignState.onDialogueComplete) {
-    console.log('[CampaignSystem] Triggering onDialogueComplete callback');
-    campaignState.onDialogueComplete();
-    campaignState.onDialogueComplete = null;
+    container.classList.add('dialogue-closing');
+    playInterfaceSound('close');
+    
+    setTimeout(() => {
+      container.classList.add('hidden');
+      container.classList.remove('dialogue-closing');
+      container.remove(); // Clean cleanup
+      
+      campaignState.state = 'playing';
+      if (ctxRef) {
+        ctxRef.match.paused = false; // Unpause match loop
+      }
+      if (campaignState.onDialogueComplete) {
+        campaignState.onDialogueComplete();
+        campaignState.onDialogueComplete = null;
+      }
+    }, 300);
+  } else {
+    campaignState.state = 'playing';
+    if (ctxRef) {
+      ctxRef.match.paused = false;
+    }
+    if (campaignState.onDialogueComplete) {
+      campaignState.onDialogueComplete();
+      campaignState.onDialogueComplete = null;
+    }
   }
 }
 
 // Injects dialogue markup dynamically if it is not inside index.html yet
 function injectDialogueHTML() {
+  const oldContainer = document.getElementById('dialogueContainer');
+  if (oldContainer) {
+    oldContainer.remove();
+  }
+
   const container = document.createElement('div');
   container.id = 'dialogueContainer';
   container.className = 'dialogue-container hidden';
   container.innerHTML = `
-    <div class="dialogue-noise-overlay"></div>
+    <div class="dialogue-grid-bg"></div>
     <div class="dialogue-scanlines"></div>
     <canvas id="dialogueStaticCanvas" width="128" height="128"></canvas>
     <div class="dialogue-frame">
-      <div class="dialogue-portrait-wrapper">
-        <img id="dialoguePortrait" src="" alt="Portrait">
-        <div class="dialogue-portrait-scanner"></div>
+      <div class="dialogue-portrait-section">
+        <div class="dialogue-portrait-wrapper">
+          <img id="dialoguePortrait" src="" alt="Portrait">
+          <div class="dialogue-portrait-scanner"></div>
+          <div class="dialogue-portrait-glitch"></div>
+        </div>
+        <div class="dialogue-audio-waveform">
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+          <span class="bar"></span>
+        </div>
       </div>
-      <div class="dialogue-content">
-        <div id="dialogueSpeaker" class="dialogue-speaker">COMMANDER</div>
-        <div id="dialogueText" class="dialogue-text">Initializing dialogue link...</div>
-        <div class="dialogue-actions">
-          <button id="dialoguePrevBtn" type="button" class="dialogue-btn">BACK</button>
-          <button id="dialogueNextBtn" type="button" class="dialogue-btn">NEXT</button>
+      <div class="dialogue-body-section">
+        <div class="dialogue-header">
+          <div class="dialogue-speaker-badge">
+            <span class="bracket">[</span>
+            <span id="dialogueSpeaker" class="dialogue-speaker">COMMANDER</span>
+            <span class="bracket">]</span>
+          </div>
+          <div class="dialogue-live-tag">
+            <span class="live-pulse"></span>
+            <span class="live-text">LIVE SIGNAL</span>
+          </div>
+        </div>
+        <div class="dialogue-text-wrapper">
+          <div id="dialogueText" class="dialogue-text">Initializing dialogue link...</div>
+        </div>
+        <div class="dialogue-footer">
+          <div class="dialogue-tips">
+            <span class="key-tip">SPACE / CLICK</span> to advance • <span class="key-tip">ESC</span> to skip
+          </div>
+          <div class="dialogue-actions">
+            <button id="dialoguePrevBtn" type="button" class="dialogue-btn">
+              <span class="btn-arrow">◀</span> BACK
+            </button>
+            <button id="dialogueNextBtn" type="button" class="dialogue-btn primary">
+              NEXT <span class="btn-arrow">▶</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -595,7 +790,8 @@ function injectDialogueHTML() {
     e.stopPropagation();
     handleDialogueNext();
   });
-  container.addEventListener('click', () => {
+  container.addEventListener('click', (e) => {
+    if (e.target.closest('.dialogue-btn')) return;
     handleDialogueNext();
   });
 }
@@ -614,12 +810,12 @@ function updateDialogueStatic() {
     data[i] = val;
     data[i + 1] = val;
     data[i + 2] = val;
-    data[i + 3] = 20; // 0.08 opacity static overlay
+    data[i + 3] = 16; // Subtle static opacity overlay
   }
   ctx.putImageData(imgData, 0, 0);
 }
 
-export function updateCampaignDebugHUD() {
+export function updateCampaignDebugHUD(ctx) {
   if (!campaignState.active) {
     const hud = document.getElementById('campaignDebugHUD');
     if (hud) hud.classList.add('hidden');
@@ -655,6 +851,27 @@ export function updateCampaignDebugHUD() {
   const container = document.getElementById('dialogueContainer');
   const containerVisible = container ? !container.classList.contains('hidden') : 'NOT_FOUND';
   
+  const aliveEnemies = campaignState.enemies.filter(e => !e.health.dead);
+  let closestDist = 'N/A';
+  let closestSees = 'N/A';
+  let closestType = 'N/A';
+  if (ctx.player && !ctx.player.health.dead && aliveEnemies.length > 0) {
+    let bestDist = Infinity;
+    let bestEnemy = null;
+    aliveEnemies.forEach(e => {
+      const d = distance2D(e.transform, ctx.player.transform);
+      if (d < bestDist) {
+        bestDist = d;
+        bestEnemy = e;
+      }
+    });
+    if (bestEnemy) {
+      closestDist = bestDist.toFixed(1) + 'm';
+      closestType = bestEnemy.campaignEnemyType.toUpperCase();
+      closestSees = hasLineOfSight(bestEnemy.transform, ctx.player.transform, ctx.collisionShapes) ? 'YES' : 'NO';
+    }
+  }
+
   hud.innerHTML = `
     <div style="font-weight: 900; border-bottom: 1px solid rgba(255,85,0,0.25); padding-bottom: 4px; margin-bottom: 6px; color:#ff5500;">
       // TACTICAL SYSTEM MONITOR
@@ -668,16 +885,28 @@ export function updateCampaignDebugHUD() {
       <span style="color:#00e0ff;">${campaignState.state.toUpperCase()}</span>
     </div>
     <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
-      <span>DIALOGUE ACTIVE:</span>
-      <span style="color:${campaignState.state === 'dialogue' ? '#00ff88' : '#888'};">${campaignState.state === 'dialogue' ? 'YES' : 'NO'}</span>
+      <span>ENEMIES ALIVE:</span>
+      <span style="color:#ff3333; font-weight:bold;">${aliveEnemies.length}</span>
     </div>
     <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
-      <span>DIALOGUE SEQ INDEX:</span>
-      <span>${campaignState.dialogueIndex}</span>
+      <span>CLOSEST ENEMY:</span>
+      <span>${closestType}</span>
     </div>
     <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
-      <span>TYPING LINE:</span>
-      <span style="color:${campaignState.dialogueTyping ? '#ffcc00' : '#888'};">${campaignState.dialogueTyping ? 'TRUE' : 'FALSE'}</span>
+      <span>CLOSEST DIST:</span>
+      <span>${closestDist}</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
+      <span>CLOSEST SEES:</span>
+      <span style="color:${closestSees === 'YES' ? '#00ff88' : '#ff3333'}; font-weight:bold;">${closestSees}</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
+      <span>PLAYER TEAM:</span>
+      <span style="color:#00ff88;">${ctx.player ? ctx.player.teamId : 'N/A'}</span>
+    </div>
+    <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
+      <span>PLAYER HEALTH:</span>
+      <span style="color:#00ff88;">${ctx.player ? ctx.player.health.current.toFixed(1) : 'N/A'}</span>
     </div>
     <div style="display:flex; justify-content:space-between; margin-bottom: 3px;">
       <span>CONTAINER VISIBLE:</span>
@@ -699,32 +928,57 @@ export function updateCampaign(ctx, dt, physics) {
     return;
   }
 
-  updateCampaignDebugHUD();
+  // Throttle the Debug HUD updating to prevent heavy DOM rendering and distance loops every frame (lag fix)
+  campaignState.debugTimer = (campaignState.debugTimer || 0) + dt;
+  if (campaignState.debugTimer >= 0.15) {
+    campaignState.debugTimer = 0;
+    updateCampaignDebugHUD(ctx);
+  }
 
   // 1. Dialogue overlay ticking (Typewriter effect & TV Static)
   if (campaignState.state === 'dialogue') {
     updateDialogueStatic();
     
     if (campaignState.dialogueTyping) {
-      campaignState.dialogueTextTimer += dt;
-      // Print 40 chars per second
-      if (campaignState.dialogueTextTimer >= 0.025) {
-        campaignState.dialogueTextTimer = 0;
-        const line = campaignState.dialogueSequence[campaignState.dialogueIndex];
-        if (line) {
-          campaignState.dialogueCharIndex++;
-          const textEl = document.getElementById('dialogueText');
-          if (textEl) {
-            textEl.textContent = line.text.substring(0, campaignState.dialogueCharIndex);
-          }
-          if (campaignState.dialogueCharIndex >= line.text.length) {
-            campaignState.dialogueTyping = false;
+      if (campaignState.dialogueDelay && campaignState.dialogueDelay > 0) {
+        campaignState.dialogueDelay -= dt;
+      } else {
+        campaignState.dialogueTextTimer += dt;
+        // Print 50 chars per second
+        if (campaignState.dialogueTextTimer >= 0.02) {
+          campaignState.dialogueTextTimer = 0;
+          const line = campaignState.dialogueSequence[campaignState.dialogueIndex];
+          if (line) {
+            campaignState.dialogueCharIndex++;
+            const textEl = document.getElementById('dialogueText');
+            if (textEl) {
+              textEl.textContent = line.text.substring(0, campaignState.dialogueCharIndex);
+            }
+            
+            // Play mechanical tick beep sound
+            playTypingSound(campaignState.dialogueCharIndex);
+
+            if (campaignState.dialogueCharIndex >= line.text.length) {
+              campaignState.dialogueTyping = false;
+              const container = document.getElementById('dialogueContainer');
+              if (container) container.classList.remove('is-typing');
+            } else {
+              // Pause delays on punctuation to mimic actual speech delivery pacing
+              const curChar = line.text[campaignState.dialogueCharIndex - 1];
+              const nextChar = line.text[campaignState.dialogueCharIndex];
+              if ((curChar === '.' || curChar === ',' || curChar === '!' || curChar === '?') && nextChar === ' ') {
+                campaignState.dialogueDelay = curChar === ',' ? 0.15 : 0.35;
+              }
+            }
           }
         }
       }
     }
     return; // Freeze rest of the campaign tick while dialogue is active
   }
+
+  // Update animated searchlights, reactor core generators, radioactive green slag and electric fences
+  updateCampaignAnimationsAndHazards(ctx, dt);
 
   // 2. Scan dialogue trigger gates
   if (ctx.player && !ctx.player.health.dead) {
@@ -745,7 +999,13 @@ export function updateCampaign(ctx, dt, physics) {
           }
 
           // Trigger dialogue sequence
-          triggerDialogueSequence(gate.dialogueIndex);
+          if (gate.dialogueIndex === 3) {
+            triggerDialogueSequence(3, () => {
+              spawnSectorWarden(ctx);
+            });
+          } else {
+            triggerDialogueSequence(gate.dialogueIndex);
+          }
           updateQuestsHUD();
           checkQuestCompletionNotifications();
           break;
@@ -800,28 +1060,165 @@ export function updateCampaign(ctx, dt, physics) {
         enemy.renderable.group.rotation.y = targetYaw;
 
         // 2. Floating AI pathfinding/movement: drift towards player if they are in range (50m) but stay at a distance
+        let nextX = enemy.transform.x;
+        let nextZ = enemy.transform.z;
+
         if (dist <= 50) {
           if (dist > 15) {
             const moveSpeed = 8.5; // Drones drift speed
-            enemy.transform.x += (dx / dist) * moveSpeed * dt;
-            enemy.transform.z += (dz / dist) * moveSpeed * dt;
-            physics.setTranslation(enemy.rapierBody.body, enemy.transform.x, enemy.transform.y, enemy.transform.z);
-            enemy.renderable.group.position.set(enemy.transform.x, enemy.transform.y, enemy.transform.z);
-          }
-
-          // 3. Fire security pulse
-          if (enemy.cooldown <= 0 && hasLineOfSight(enemy.transform, playerPos, ctx.collisionShapes)) {
-            spawnEnemyBullet(ctx, physics, enemy.transform.x, enemy.transform.y, enemy.transform.z, targetYaw, playerPos);
-            enemy.cooldown = 1.6; // Firing rate for drone
+            nextX += (dx / dist) * moveSpeed * dt;
+            nextZ += (dz / dist) * moveSpeed * dt;
           }
         } else {
-          // Idle patrol drift around spawn area
+          // Idle drift around spawn area
           enemy.patrolAngle += dt * 0.4;
           const patrolSpeed = 2.0;
-          enemy.transform.x += Math.sin(enemy.patrolAngle) * patrolSpeed * dt;
-          enemy.transform.z += Math.cos(enemy.patrolAngle) * patrolSpeed * dt;
-          physics.setTranslation(enemy.rapierBody.body, enemy.transform.x, enemy.transform.y, enemy.transform.z);
-          enemy.renderable.group.position.set(enemy.transform.x, enemy.transform.y, enemy.transform.z);
+          nextX += Math.sin(enemy.patrolAngle) * patrolSpeed * dt;
+          nextZ += Math.cos(enemy.patrolAngle) * patrolSpeed * dt;
+        }
+
+        // Apply OBB collision detection against walls, buildings, and static obstacles
+        const droneObb = makeObb(nextX, nextZ, 2.0, 2.0, targetYaw || 0);
+        const filteredShapes = ctx.collisionShapes.filter((shape) => {
+          if (shape.isCampaignEnemy) return false;
+          let obstacleHeight = shape.height !== undefined && shape.height > 0 ? shape.height : 0;
+          if (obstacleHeight === 0) {
+            if (shape.type === 'wall' || shape.type === 'building') {
+              obstacleHeight = 35;
+            } else if (shape.type === 'barrier') {
+              obstacleHeight = 0.6;
+            } else if (shape.type === 'crate') {
+              obstacleHeight = 1.8;
+            } else if (shape.type === 'parked-car') {
+              obstacleHeight = 1.3;
+            }
+          }
+          return enemy.transform.y < obstacleHeight;
+        });
+
+        const collision = findObbCollision(droneObb, filteredShapes);
+        if (collision) {
+          enemy.transform.x = nextX + collision.normal.x * (collision.depth + 0.05);
+          enemy.transform.z = nextZ + collision.normal.z * (collision.depth + 0.05);
+          if (dist > 50) {
+            // Divert patrol angle
+            enemy.patrolAngle = Math.atan2(collision.normal.x, collision.normal.z) + (Math.random() - 0.5) * 1.5;
+          }
+        } else {
+          enemy.transform.x = nextX;
+          enemy.transform.z = nextZ;
+        }
+
+        physics.setTranslation(enemy.rapierBody.body, enemy.transform.x, enemy.transform.y, enemy.transform.z);
+        enemy.renderable.group.position.set(enemy.transform.x, enemy.transform.y, enemy.transform.z);
+
+        // Update the collision shape coordinates as the drone moves!
+        if (enemy.collisionShapeRef) {
+          enemy.collisionShapeRef.x = enemy.transform.x;
+          enemy.collisionShapeRef.z = enemy.transform.z;
+        }
+
+        // 3. Fire security pulse
+        if (dist <= 50 && enemy.cooldown <= 0 && hasLineOfSight(enemy.transform, playerPos, ctx.collisionShapes)) {
+          spawnEnemyBullet(ctx, physics, enemy.transform.x, enemy.transform.y, enemy.transform.z, targetYaw, playerPos);
+          enemy.cooldown = 1.6; // Firing rate for drone
+        }
+      }
+      else if (enemy.campaignEnemyType === 'boss') {
+        // Bobbing vertical movement
+        enemy.transform.y = 2.5 + Math.sin(performance.now() * 0.005) * 0.25;
+        enemy.renderable.group.position.y = enemy.transform.y;
+
+        const dx = playerPos.x - enemy.transform.x;
+        const dz = playerPos.z - enemy.transform.z;
+        const targetYaw = Math.atan2(dx, dz);
+
+        // Slowly rotate boss chassis toward player
+        let diff = targetYaw - enemy.renderable.group.rotation.y;
+        while (diff < -Math.PI) diff += Math.PI * 2;
+        while (diff > Math.PI) diff -= Math.PI * 2;
+        enemy.renderable.group.rotation.y += diff * dt * 3.2;
+        enemy.transform.yaw = enemy.renderable.group.rotation.y;
+
+        if (enemy.collisionShapeRef) {
+          enemy.collisionShapeRef.x = enemy.transform.x;
+          enemy.collisionShapeRef.z = enemy.transform.z;
+        }
+
+        // Maintain combat distance
+        if (dist > 28) {
+          const driftSpeed = 5.0;
+          enemy.transform.x += (dx / dist) * driftSpeed * dt;
+          enemy.transform.z += (dz / dist) * driftSpeed * dt;
+          enemy.renderable.group.position.x = enemy.transform.x;
+          enemy.renderable.group.position.z = enemy.transform.z;
+        } else if (dist < 15) {
+          const backSpeed = 4.0;
+          enemy.transform.x -= (dx / dist) * backSpeed * dt;
+          enemy.transform.z -= (dz / dist) * backSpeed * dt;
+          enemy.renderable.group.position.x = enemy.transform.x;
+          enemy.renderable.group.position.z = enemy.transform.z;
+        }
+
+        // Update HUD Health Bar Fill dynamically (optimized with cached elements & dirty checks to avoid layout thrashing)
+        const pct = Math.max(0, (enemy.health.current / enemy.health.max) * 100);
+        if (enemy.lastPct === undefined || enemy.lastPct !== pct) {
+          enemy.lastPct = pct;
+          const fillEl = enemy.hud?.fill || document.getElementById('bossHealthBarFill');
+          if (fillEl) {
+            fillEl.style.width = `${pct}%`;
+            const statusEl = enemy.hud?.status || fillEl.parentElement?.nextElementSibling;
+            if (statusEl) {
+              if (pct > 60) {
+                statusEl.textContent = `SYSTEMS: NOMINAL // HEALTH: ${pct.toFixed(0)}%`;
+              } else if (pct > 25) {
+                statusEl.textContent = `WARNING: HULL INTEGRITY CRITICAL // EMP MINES ARMED`;
+                statusEl.style.color = '#ff9f1a';
+              } else {
+                statusEl.textContent = `CRITICAL FAILURE IMMINENT // MELTDOWN SEQUENCE ACTIVE`;
+                statusEl.style.color = '#ff4757';
+                statusEl.style.animation = 'warningTextPulse 0.2s infinite alternate';
+              }
+            }
+          }
+        }
+
+        // Combat Phases
+        enemy.phaseTimer += dt;
+        if (enemy.phase === 'gatling') {
+          if (enemy.cooldown <= 0 && dist < 50 && hasLineOfSight(enemy.transform, playerPos, ctx.collisionShapes)) {
+            const yaw = enemy.transform.yaw;
+            const mlx = enemy.transform.x - Math.cos(yaw) * 2.5 + Math.sin(yaw) * 2.65;
+            const mlz = enemy.transform.z + Math.sin(yaw) * 2.5 + Math.cos(yaw) * 2.65;
+            const mrx = enemy.transform.x + Math.cos(yaw) * 2.5 + Math.sin(yaw) * 2.65;
+            const mrz = enemy.transform.z - Math.sin(yaw) * 2.5 + Math.cos(yaw) * 2.65;
+
+            spawnEnemyBullet(ctx, physics, mlx, enemy.transform.y, mlz, yaw, playerPos);
+            spawnEnemyBullet(ctx, physics, mrx, enemy.transform.y, mrz, yaw, playerPos);
+
+            enemy.cooldown = 0.22; // rapid laser sweeps
+          }
+
+          if (enemy.phaseTimer >= 7.0) {
+            enemy.phase = 'emp_deploy';
+            enemy.phaseTimer = 0;
+            enemy.mineDeployCount = 0;
+          }
+        } 
+        else if (enemy.phase === 'emp_deploy') {
+          if (enemy.phaseTimer >= 0.5 && enemy.mineDeployCount < 3) {
+            enemy.mineDeployCount++;
+            enemy.phaseTimer = 0;
+            const offset = Math.random() * Math.PI * 2;
+            const mx = enemy.transform.x + Math.sin(offset) * 8.0;
+            const mz = enemy.transform.z + Math.cos(offset) * 8.0;
+            spawnProximityEMPMine(ctx, mx, mz);
+          }
+
+          if (enemy.mineDeployCount >= 3 && enemy.phaseTimer >= 1.5) {
+            enemy.phase = 'gatling';
+            enemy.phaseTimer = 0;
+          }
         }
       }
     }
@@ -851,6 +1248,30 @@ export function updateCampaign(ctx, dt, physics) {
       // Remove from ECS
       ctx.ecs.remove(enemy);
 
+      if (enemy.campaignEnemyType === 'boss') {
+        const bar = document.getElementById('bossHealthBarContainer');
+        if (bar) bar.remove();
+        campaignState.bossDefeated = true;
+        
+        // Disable electric fences visually
+        if (ctx.campaignDecorations && ctx.campaignDecorations.electricFences) {
+          ctx.campaignDecorations.electricFences.forEach((fence) => {
+            if (fence.plasmaMesh) {
+              fence.plasmaMesh.visible = false;
+            }
+            if (fence.light) {
+              fence.light.intensity = 0;
+            }
+          });
+        }
+        
+        // Remove collision shapes of type 'electric-fence'
+        ctx.collisionShapes = ctx.collisionShapes.filter(shape => shape.type !== 'electric-fence');
+
+        // Trigger boss kill dialogues sequence
+        triggerDialogueSequence(4);
+      }
+
       // Trigger Victory sequence if all enemies are dead
       const remaining = campaignState.enemies.filter(e => !e.health.dead).length;
       updateObjectivesHUD(remaining);
@@ -858,7 +1279,15 @@ export function updateCampaign(ctx, dt, physics) {
       checkQuestCompletionNotifications();
       
       if (remaining === 0 && !campaignState.portalActive) {
-        activateExitPortal(ctx);
+        if (campaignState.bossSpawned) {
+          activateExitPortal(ctx);
+        } else {
+          const tips = document.getElementById('quickTipsLayer');
+          if (tips) {
+            tips.innerHTML = `<span style="color:#00f0ff; font-weight:bold;">[SECURE EXTRACTION: PROCEED TO (-80, -80)]</span>`;
+            tips.style.display = 'block';
+          }
+        }
       }
     }
   });
@@ -1093,7 +1522,7 @@ function triggerQuestReminder() {
 
 function checkQuestCompletionNotifications() {
   const gate1Triggered = campaignState.gates?.[0]?.triggered || false;
-  const killedEnemies = campaignState.enemies ? campaignState.enemies.filter(e => e.health.dead).length : 0;
+  const killedEnemies = campaignState.enemies ? campaignState.enemies.filter(e => e.health.dead && e.campaignEnemyType !== 'boss').length : 0;
   const defensesCleared = (killedEnemies >= 5);
   const portalActive = campaignState.portalActive || false;
 
@@ -1148,4 +1577,484 @@ function showQuestCompletionPopup(questName) {
   setTimeout(() => {
     popup.classList.remove('show');
   }, 4000);
+}
+
+// --- 5. MALFUNCTIONING HAZARDS & SEARCHLIGHTS ANIMATOR ---
+function updateCampaignAnimationsAndHazards(ctx, dt) {
+  if (!ctx.campaignDecorations) return;
+
+  const player = ctx.player;
+  const hasPlayer = player && !player.health.dead;
+  const now = performance.now();
+  const appEl = document.getElementById('app');
+
+  // 0. Malfunctioning wall lights sputtering
+  if (ctx.campaignDecorations.flickeringLights) {
+    ctx.campaignDecorations.flickeringLights.forEach((fl) => {
+      const rng = Math.random();
+      if (rng < 0.08) {
+        // Deep drop-out (sputtering dark state)
+        fl.light.intensity = 0.05;
+        fl.bulb.material.emissiveIntensity = 0.1;
+      } else if (rng < 0.25) {
+        // Flickering dim/unstable state
+        fl.light.intensity = fl.baseIntensity * (0.2 + Math.random() * 0.3);
+        fl.bulb.material.emissiveIntensity = 0.4 + Math.random() * 0.4;
+      } else {
+        // Full bright state
+        fl.light.intensity = fl.baseIntensity * (0.9 + Math.random() * 0.2);
+        fl.bulb.material.emissiveIntensity = fl.baseEmissive * (0.9 + Math.random() * 0.2);
+      }
+    });
+  }
+
+  // Decrement hazard cooldowns
+  if (player) {
+    if (player.hazardCooldown === undefined) player.hazardCooldown = 0;
+    if (player.hazardCooldown > 0) player.hazardCooldown -= dt;
+  }
+  const aliveEnemies = campaignState.enemies ? campaignState.enemies.filter(e => !e.health.dead) : [];
+  aliveEnemies.forEach((enemy) => {
+    if (enemy.hazardCooldown === undefined) enemy.hazardCooldown = 0;
+    if (enemy.hazardCooldown > 0) enemy.hazardCooldown -= dt;
+  });
+
+  // 1. Generator
+  const gen = ctx.campaignDecorations.generator;
+  if (gen) {
+    gen.time += dt;
+    gen.ring.rotation.z += dt * 3.5;
+    if (gen.group.children[1]) {
+      const core = gen.group.children[1];
+      core.material.emissiveIntensity = 1.6 + Math.sin(gen.time * 8) * 0.6;
+      if (Math.random() < 0.1) {
+        core.material.emissiveIntensity = 4.5;
+      }
+    }
+    if (Math.random() < 0.16) {
+      gen.light.intensity = 0.3 + Math.random() * 0.7;
+    } else {
+      gen.light.intensity = 1.8 + Math.random() * 0.4;
+    }
+  }
+
+  // 2. Searchlights
+  ctx.campaignDecorations.spotlights.forEach((spot) => {
+    spot.angle = (spot.angle || 0) + dt * spot.sweepSpeed;
+    const sweepAngle = spot.baseAngle + Math.sin(spot.angle) * 0.7;
+    
+    spot.target.position.x = spot.x + Math.sin(sweepAngle) * 22;
+    spot.target.position.z = spot.z + Math.cos(sweepAngle) * 22;
+    spot.headGroup.lookAt(spot.target.position);
+
+    if (hasPlayer) {
+      const pPos = player.transform;
+      const distToLight = Math.hypot(pPos.x - spot.target.position.x, pPos.z - spot.target.position.z);
+      
+      if (distToLight < 6.5) {
+        if (Math.random() < 0.2) {
+          spot.spotlight.color.setHex(0xff3333);
+          spot.beam.material.color.setHex(0xff3333);
+        } else {
+          spot.spotlight.color.setHex(0x00f0ff);
+          spot.beam.material.color.setHex(0x00f0ff);
+        }
+        
+        const tips = document.getElementById('quickTipsLayer');
+        if (tips) {
+          tips.innerHTML = `<span style="color:#ff3333; font-weight:bold; animation: warningTextPulse 0.4s infinite alternate;">[WARNING: AREA SCAN DETECTED]</span>`;
+          tips.style.display = 'block';
+        }
+      } else {
+        spot.spotlight.color.setHex(0x00f0ff);
+        spot.beam.material.color.setHex(0x00f0ff);
+      }
+    }
+  });
+
+  // 3. Radioactive Green Slag Puddles & EMP Mines
+  let onSlag = false;
+  ctx.campaignDecorations.slagPuddles.forEach((puddle) => {
+    if (puddle.isMine) {
+      puddle.timeActive += dt;
+      puddle.flashTimer += dt;
+      
+      puddle.mesh.position.y = 0.45 + Math.sin(now * 0.008) * 0.12;
+
+      if (puddle.flashTimer >= 0.5) {
+        puddle.flashTimer = 0;
+        puddle.light.intensity = puddle.light.intensity === 0 ? 3.0 : 0;
+        if (puddle.mesh.children[1]) {
+          puddle.mesh.children[1].material.emissiveIntensity = puddle.light.intensity;
+        }
+      }
+
+      if (hasPlayer && !puddle.detonated) {
+        const dist = Math.hypot(player.transform.x - puddle.x, player.transform.z - puddle.z);
+        if (dist < 8.0) {
+          puddle.detonated = true;
+          puddle.light.color.setHex(0xff3333);
+          if (puddle.mesh.children[1]) {
+            puddle.mesh.children[1].material.color.setHex(0xff3333);
+            puddle.mesh.children[1].material.emissive.setHex(0xff3333);
+          }
+          
+          setTimeout(() => {
+            if (ctx.effects) {
+              ctx.effects.emitDeathExplosion(puddle.x, puddle.z, { playerDeath: false });
+              ctx.effects.emitImpact?.(puddle.x, puddle.z, { x: 0, z: 1 }, 18);
+            }
+
+            const endDist = Math.hypot(player.transform.x - puddle.x, player.transform.z - puddle.z);
+            if (endDist < 9.5) {
+              applyDamage(player, 25.0, 'energy', null, ctx.effects, { ctx });
+
+              if (player.weaponSlots) {
+                ['q', 'e'].forEach((slot) => {
+                  const w = player.weaponSlots[slot];
+                  if (w && w.ammo !== undefined) {
+                    w.ammo = Math.max(0, w.ammo - 2);
+                  }
+                });
+                if (player.weaponSlots.turret && player.weaponSlots.turret.ammoInMagazine !== undefined) {
+                  player.weaponSlots.turret.ammoInMagazine = Math.max(0, player.weaponSlots.turret.ammoInMagazine - 12);
+                }
+              }
+              
+              if (appEl) {
+                appEl.classList.add('emp-shock-flicker');
+                setTimeout(() => appEl.classList.remove('emp-shock-flicker'), 450);
+              }
+            }
+
+            ctx.scene.remove(puddle.mesh);
+            const listIdx = ctx.campaignDecorations.slagPuddles.indexOf(puddle);
+            if (listIdx !== -1) {
+              ctx.campaignDecorations.slagPuddles.splice(listIdx, 1);
+            }
+          }, 800);
+        }
+      }
+      return;
+    }
+
+    puddle.mesh.material.emissiveIntensity = 2.0 + Math.sin(now * 0.005) * 0.5;
+
+    if (hasPlayer) {
+      const dist = Math.hypot(player.transform.x - puddle.x, player.transform.z - puddle.z);
+      if (dist < puddle.radius + 1.8) {
+        onSlag = true;
+        if (player.hazardCooldown <= 0) {
+          applyDamage(player, 15.0 * 0.15, 'energy', null, ctx.effects, { ctx });
+          player.hazardCooldown = 0.15;
+        }
+      }
+    }
+
+    aliveEnemies.forEach((enemy) => {
+      if (enemy.campaignEnemyType === 'boss') return; // Boss is invulnerable to traps
+      let radiusBonus = 1.6;
+      if (enemy.campaignEnemyType === 'turret') radiusBonus = 2.5;
+
+      const dist = Math.hypot(enemy.transform.x - puddle.x, enemy.transform.z - puddle.z);
+      if (dist < puddle.radius + radiusBonus) {
+        if (enemy.hazardCooldown <= 0) {
+          applyDamage(enemy, 15.0 * 0.15, 'energy', null, ctx.effects, { ctx });
+          enemy.hazardCooldown = 0.15;
+        }
+      }
+    });
+  });
+
+  if (appEl) {
+    if (onSlag) {
+      appEl.classList.add('cyber-screen-glitch');
+      if (Math.random() < 0.1) {
+        appEl.classList.add('slag-leak-flash');
+        setTimeout(() => appEl.classList.remove('slag-leak-flash'), 250);
+      }
+    } else {
+      appEl.classList.remove('cyber-screen-glitch');
+    }
+  }
+
+  // 4. Electric Fences
+  ctx.campaignDecorations.electricFences.forEach((fence) => {
+    if (campaignState.bossDefeated) {
+      if (fence.plasmaMesh) fence.plasmaMesh.visible = false;
+      if (fence.light) fence.light.intensity = 0;
+      return;
+    }
+
+    const noise = Math.sin(now * 0.04);
+    fence.plasmaMesh.scale.x = 1.0 + noise * 0.12;
+    fence.plasmaMesh.scale.z = 1.0 + noise * 0.12;
+    if (Math.random() < 0.08) {
+      fence.plasmaMesh.material.emissiveIntensity = 5.0;
+      fence.light.intensity = 2.5;
+    } else {
+      fence.plasmaMesh.material.emissiveIntensity = 2.5 + noise * 0.5;
+      fence.light.intensity = 1.2 + noise * 0.25;
+    }
+
+    if (hasPlayer) {
+      const px = player.transform.x;
+      const pz = player.transform.z;
+      const dx = fence.x2 - fence.x1;
+      const dz = fence.z2 - fence.z1;
+      const segLenSq = dx*dx + dz*dz;
+      let t = 0;
+      if (segLenSq > 0) {
+        t = ((px - fence.x1)*dx + (pz - fence.z1)*dz) / segLenSq;
+        t = Math.max(0, Math.min(1, t));
+      }
+      const closestX = fence.x1 + t*dx;
+      const closestZ = fence.z1 + t*dz;
+      const dist = Math.hypot(px - closestX, pz - closestZ);
+
+      if (dist < 2.2) {
+        if (player.hazardCooldown <= 0) {
+          applyDamage(player, 40.0 * 0.15, 'energy', null, ctx.effects, { ctx });
+          player.hazardCooldown = 0.15;
+        }
+        
+        if (player.velocity) {
+          player.velocity.speed *= 0.88;
+        }
+
+        if (appEl && !appEl.classList.contains('emp-shock-flicker')) {
+          appEl.classList.add('emp-shock-flicker');
+          setTimeout(() => appEl.classList.remove('emp-shock-flicker'), 400);
+        }
+      }
+    }
+
+    aliveEnemies.forEach((enemy) => {
+      if (enemy.campaignEnemyType === 'boss') return; // Boss is invulnerable to traps
+      const ex = enemy.transform.x;
+      const ez = enemy.transform.z;
+      const dx = fence.x2 - fence.x1;
+      const dz = fence.z2 - fence.z1;
+      const segLenSq = dx*dx + dz*dz;
+      let t = 0;
+      if (segLenSq > 0) {
+        t = ((ex - fence.x1)*dx + (ez - fence.z1)*dz) / segLenSq;
+        t = Math.max(0, Math.min(1, t));
+      }
+      const closestX = fence.x1 + t*dx;
+      const closestZ = fence.z1 + t*dz;
+      const dist = Math.hypot(ex - closestX, ez - closestZ);
+
+      let radiusBonus = 2.2;
+      if (enemy.campaignEnemyType === 'turret') radiusBonus = 3.0;
+
+      if (dist < radiusBonus) {
+        if (enemy.hazardCooldown <= 0) {
+          applyDamage(enemy, 40.0 * 0.15, 'energy', null, ctx.effects, { ctx });
+          enemy.hazardCooldown = 0.15;
+        }
+        
+        if (enemy.velocity) {
+          enemy.velocity.speed *= 0.88;
+        }
+      }
+    });
+  });
+
+  // 5. Particles
+  ctx.campaignDecorations.steamVents.forEach((vent) => {
+    vent.spawnTimer += dt;
+    if (vent.spawnTimer >= (vent.isFire ? 0.06 : 0.14)) {
+      vent.spawnTimer = 0;
+      const geom = new THREE.SphereGeometry(vent.isFire ? 0.22 : 0.28, 5, 5);
+      const mat = new THREE.MeshBasicMaterial({
+        color: vent.isFire ? 0xff3e3e : 0xd1ccc0,
+        transparent: true,
+        opacity: vent.isFire ? 0.85 : 0.2,
+        depthWrite: false
+      });
+      const p = new THREE.Mesh(geom, mat);
+      p.position.set(
+        (Math.random() - 0.5) * 1.3,
+        0,
+        (Math.random() - 0.5) * 1.3
+      );
+      p.vx = (Math.random() - 0.5) * 0.4;
+      p.vy = vent.isFire ? 2.4 + Math.random()*2.2 : 1.1 + Math.random() * 0.8;
+      p.vz = (Math.random() - 0.5) * 0.4;
+      p.scaleSpeed = vent.isFire ? 0.7 : 1.4;
+      p.life = vent.isFire ? 0.55 : 1.6;
+      p.maxLife = p.life;
+      vent.group.add(p);
+      vent.particles.push(p);
+    }
+
+    for (let i = vent.particles.length - 1; i >= 0; i--) {
+      const p = vent.particles[i];
+      p.life -= dt;
+      if (p.life <= 0) {
+        vent.group.remove(p);
+        vent.particles.splice(i, 1);
+      } else {
+        p.position.x += p.vx * dt;
+        p.position.y += p.vy * dt;
+        p.position.z += p.vz * dt;
+        const ratio = p.life / p.maxLife;
+        p.material.opacity = (vent.isFire ? 0.85 : 0.2) * ratio;
+        p.scale.setScalar(1.0 + (1.0 - ratio) * p.scaleSpeed);
+        if (vent.isFire) {
+          p.material.color.setHSL(0.01 + 0.12 * (1.0 - ratio), 1.0, 0.55);
+        }
+      }
+    }
+  });
+}
+
+function spawnSectorWarden(ctx) {
+  if (campaignState.bossSpawned) return;
+  campaignState.bossSpawned = true;
+
+  const bossGroup = new THREE.Group();
+  bossGroup.position.set(-80, 2.5, -50); 
+  
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x222f3e, metalness: 0.9, roughness: 0.1 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(4.0, 3.0, 4.0), bodyMat);
+  body.castShadow = true;
+  bossGroup.add(body);
+
+  const headMat = new THREE.MeshStandardMaterial({ color: 0x1e272e, metalness: 0.8, roughness: 0.2 });
+  const head = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.2, 2.5), headMat);
+  head.position.set(0, 1.2, 0.8);
+  head.castShadow = true;
+  bossGroup.add(head);
+
+  const eyeMat = new THREE.MeshStandardMaterial({ color: 0xff3333, emissive: 0xff2222, emissiveIntensity: 3.5 });
+  const eye = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.2, 0.1), eyeMat);
+  eye.position.set(0, 1.2, 2.06);
+  bossGroup.add(eye);
+
+  const gunMat = new THREE.MeshStandardMaterial({ color: 0x57606f, metalness: 0.9, roughness: 0.15 });
+  const barrelGeom = new THREE.CylinderGeometry(0.3, 0.3, 3.2, 12);
+  
+  const gunL = new THREE.Mesh(barrelGeom, gunMat);
+  gunL.position.set(-2.5, 0, 1.0);
+  gunL.rotation.x = Math.PI / 2;
+  gunL.castShadow = true;
+  bossGroup.add(gunL);
+
+  const gunR = new THREE.Mesh(barrelGeom, gunMat);
+  gunR.position.set(2.5, 0, 1.0);
+  gunR.rotation.x = Math.PI / 2;
+  gunR.castShadow = true;
+  bossGroup.add(gunR);
+
+  const muzzleGeom = new THREE.SphereGeometry(0.32, 8, 8);
+  const muzL = new THREE.Mesh(muzzleGeom, eyeMat);
+  muzL.position.set(-2.5, 0, 2.65);
+  bossGroup.add(muzL);
+
+  const muzR = new THREE.Mesh(muzzleGeom, eyeMat);
+  muzR.position.set(2.5, 0, 2.65);
+  bossGroup.add(muzR);
+
+  const thrusterMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00a8ff, emissiveIntensity: 4.0 });
+  const thruster = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.0, 0.8, 12), thrusterMat);
+  thruster.position.y = -1.6;
+  bossGroup.add(thruster);
+
+  ctx.scene.add(bossGroup);
+
+  const coll = {
+    type: 'boss-mech',
+    x: -80,
+    z: -50,
+    w: 6.0,
+    d: 6.0,
+    r: 0,
+    padding: 0.3,
+    height: 5.0,
+    isCampaignEnemy: true
+  };
+  ctx.collisionShapes.push(coll);
+
+  const entity = {
+    id: 'campaign-boss-warden',
+    isCampaignEnemy: true,
+    campaignEnemyType: 'boss',
+    teamId: 'red',
+    team: 'red',
+    teamColor: '#ff2222',
+    teamName: 'Sector Warden AI',
+    displayName: 'THE SECTOR WARDEN',
+    health: { current: 600, max: 600, dead: false, hitFlash: 0 },
+    transform: { x: -80, y: 2.5, z: -50, yaw: 0 },
+    renderable: { group: bossGroup },
+    collisionShapeRef: coll,
+    cooldown: 0,
+    phase: 'gatling', 
+    phaseTimer: 0,
+    mineDeployCount: 0
+  };
+
+  ctx.ecs.add(entity);
+  campaignState.enemies.push(entity);
+
+  showBossHUD();
+  entity.hud = {
+    fill: document.getElementById('bossHealthBarFill'),
+    status: document.getElementById('bossHealthBarFill')?.parentElement?.nextElementSibling
+  };
+}
+
+function spawnProximityEMPMine(ctx, x, z) {
+  if (!ctx.campaignDecorations) return;
+
+  const mineGroup = new THREE.Group();
+  mineGroup.position.set(x, 0.4, z);
+
+  const base = new THREE.Mesh(new THREE.SphereGeometry(0.7, 10, 10), new THREE.MeshStandardMaterial({ color: 0x3d3d3d, metalness: 0.9, roughness: 0.2 }));
+  base.castShadow = true;
+  mineGroup.add(base);
+
+  const lightRing = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.08, 6, 12), new THREE.MeshStandardMaterial({ color: 0xffea00, emissive: 0xffaa00, emissiveIntensity: 2.0 }));
+  lightRing.rotation.x = Math.PI / 2;
+  mineGroup.add(lightRing);
+
+  const pointLight = new THREE.PointLight(0xffaa00, 1.2, 8);
+  pointLight.position.set(0, 0, 0);
+  mineGroup.add(pointLight);
+
+  ctx.scene.add(mineGroup);
+
+  ctx.campaignDecorations.slagPuddles.push({
+    isMine: true,
+    x,
+    z,
+    mesh: mineGroup,
+    light: pointLight,
+    flashTimer: 0,
+    detonated: false,
+    timeActive: 0
+  });
+}
+
+function showBossHUD() {
+  let container = document.getElementById('bossHealthBarContainer');
+  if (container) container.remove();
+
+  container = document.createElement('div');
+  container.id = 'bossHealthBarContainer';
+  container.className = 'boss-health-bar-container';
+  container.innerHTML = `
+    <div class="boss-name">SECTOR WARDEN - COMPILER MECH</div>
+    <div class="boss-health-bar">
+      <div id="bossHealthBarFill" class="boss-health-bar-fill" style="width: 100%;"></div>
+    </div>
+    <div class="boss-status">SYSTEMS: ACTIVE // EMP ONLINE</div>
+  `;
+  document.getElementById('app').appendChild(container);
+  
+  setTimeout(() => {
+    container.classList.add('active');
+  }, 100);
 }

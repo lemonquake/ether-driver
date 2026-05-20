@@ -737,10 +737,20 @@ export const mapRegistry = {
       ctx.specialTiles = [];
       ctx.ramps = [];
 
-      // Lighting
-      const hemi = new THREE.HemisphereLight(0x7fbfff, 0x1f2f3f, 0.6);
+      // Initialize campaign animated elements array
+      ctx.campaignDecorations = {
+        spotlights: [],
+        steamVents: [],
+        slagPuddles: [],
+        electricFences: [],
+        generator: null,
+        flickeringLights: []
+      };
+
+      // Lighting - Pitch dark/moody cyberpunk night setting
+      const hemi = new THREE.HemisphereLight(0x0c1328, 0x050510, 0.05); // very dim midnight blue
       ctx.scene.add(hemi);
-      const sun = new THREE.DirectionalLight(0xffab73, 0.85);
+      const sun = new THREE.DirectionalLight(0x3a5a80, 0.05); // extremely weak dark blue moonlight
       sun.position.set(-50, 80, 50);
       sun.castShadow = true;
       sun.shadow.mapSize.set(1024, 1024);
@@ -791,6 +801,375 @@ export const mapRegistry = {
       tank2.receiveShadow = true;
       ctx.scene.add(tank2);
       register(ctx, 'tank-2', 80, 25, 12, 12, 0, 0.2, 5);
+
+      // --- 1. MALFUNCTIONING GENERATOR WITH SAGGING CABLES ---
+      const genGroup = new THREE.Group();
+      genGroup.position.set(40, 0, 65);
+      
+      const metalMat = new THREE.MeshStandardMaterial({ color: 0x2c3e50, metalness: 0.85, roughness: 0.2 });
+      const genBase = new THREE.Mesh(new THREE.BoxGeometry(4, 3, 4), metalMat);
+      genBase.position.y = 1.5;
+      genBase.castShadow = true;
+      genBase.receiveShadow = true;
+      genGroup.add(genBase);
+
+      const coreMat = new THREE.MeshStandardMaterial({ color: 0xffaa00, emissive: 0xff7700, emissiveIntensity: 2.2 });
+      const genCore = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.3, 2.0, 16), coreMat);
+      genCore.position.y = 3.2;
+      genGroup.add(genCore);
+
+      const ringMat = new THREE.MeshStandardMaterial({ color: 0x57606f, metalness: 0.9, roughness: 0.1 });
+      const genRing = new THREE.Mesh(new THREE.TorusGeometry(1.6, 0.2, 8, 16), ringMat);
+      genRing.position.y = 3.2;
+      genRing.rotation.x = Math.PI / 2;
+      genGroup.add(genRing);
+
+      const genCap = new THREE.Mesh(new THREE.SphereGeometry(1.0, 12, 12, 0, Math.PI*2, 0, Math.PI/2), metalMat);
+      genCap.position.y = 4.2;
+      genCap.castShadow = true;
+      genGroup.add(genCap);
+
+      const genLight = new THREE.PointLight(0xff9f1a, 1.8, 25);
+      genLight.position.set(0, 3.2, 0);
+      genLight.castShadow = true;
+      genGroup.add(genLight);
+
+      ctx.scene.add(genGroup);
+      register(ctx, 'generator-base', 40, 65, 4.2, 4.2, 0, 0.2, 5.0);
+
+      // Sagging cables
+      const wireMat = new THREE.LineBasicMaterial({ color: 0x0f141d, linewidth: 2 });
+      
+      const p1 = new THREE.Vector3(40, 4.0, 65);
+      const p2 = new THREE.Vector3(-20, 5.8, 65);
+      const mid1 = new THREE.Vector3(10, 0.9, 65);
+      const curve1 = new THREE.CatmullRomCurve3([p1, mid1, p2]);
+      const wireGeom1 = new THREE.BufferGeometry().setFromPoints(curve1.getPoints(20));
+      const wire1 = new THREE.Line(wireGeom1, wireMat);
+      ctx.scene.add(wire1);
+
+      const p3 = new THREE.Vector3(40, 4.0, 65);
+      const p4 = new THREE.Vector3(65, 2.8, 37.5);
+      const mid2 = new THREE.Vector3(52.5, 1.2, 51.25);
+      const curve2 = new THREE.CatmullRomCurve3([p3, mid2, p4]);
+      const wireGeom2 = new THREE.BufferGeometry().setFromPoints(curve2.getPoints(20));
+      const wire2 = new THREE.Line(wireGeom2, wireMat);
+      ctx.scene.add(wire2);
+
+      ctx.campaignDecorations.generator = {
+        group: genGroup,
+        ring: genRing,
+        light: genLight,
+        time: 0
+      };
+
+      // --- 2. DYNAMIC WATCHTOWERS WITH SPOTLIGHTS ---
+      const watchtowers = [
+        { x: -40, z: -20, baseAngle: 0 },
+        { x: -80, z: 60, baseAngle: Math.PI }
+      ];
+
+      watchtowers.forEach((td, idx) => {
+        const wtGroup = new THREE.Group();
+        wtGroup.position.set(td.x, 0, td.z);
+
+        const postGeom = new THREE.CylinderGeometry(0.3, 0.7, 12, 8);
+        const postMat = new THREE.MeshStandardMaterial({ color: 0x2f3542, metalness: 0.8, roughness: 0.3 });
+        const post = new THREE.Mesh(postGeom, postMat);
+        post.position.y = 6;
+        post.castShadow = true;
+        post.receiveShadow = true;
+        wtGroup.add(post);
+
+        const cabGeom = new THREE.BoxGeometry(2.2, 1.4, 2.2);
+        const cabMat = new THREE.MeshStandardMaterial({ color: 0x1e272e, metalness: 0.7, roughness: 0.3 });
+        const cab = new THREE.Mesh(cabGeom, cabMat);
+        cab.position.y = 12;
+        cab.castShadow = true;
+        wtGroup.add(cab);
+
+        const headGroup = new THREE.Group();
+        headGroup.position.y = 12.8;
+
+        const bodyMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.0, 12), new THREE.MeshStandardMaterial({ color: 0x0f141c, metalness: 0.9, roughness: 0.1 }));
+        bodyMesh.rotation.x = Math.PI / 2;
+        bodyMesh.castShadow = true;
+        headGroup.add(bodyMesh);
+
+        const lensMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00f0ff, emissiveIntensity: 3.5 });
+        const lens = new THREE.Mesh(new THREE.CircleGeometry(0.48, 12), lensMat);
+        lens.position.z = 0.51;
+        headGroup.add(lens);
+
+        const spotlight = new THREE.SpotLight(0x00f0ff, 22, 50, Math.PI / 6, 0.45, 0.7);
+        spotlight.position.set(0, 0, 0);
+        spotlight.castShadow = true;
+        spotlight.shadow.mapSize.set(512, 512);
+        headGroup.add(spotlight);
+
+        const spotTarget = new THREE.Object3D();
+        spotTarget.position.set(td.x, 0, td.z + 18);
+        ctx.scene.add(spotTarget);
+        spotlight.target = spotTarget;
+
+        const beamGeom = new THREE.CylinderGeometry(0.1, 7.5, 28, 16, 1, true);
+        const beamMat = new THREE.MeshBasicMaterial({
+          color: 0x00f0ff,
+          transparent: true,
+          opacity: 0.08,
+          side: THREE.DoubleSide,
+          depthWrite: false
+        });
+        const beam = new THREE.Mesh(beamGeom, beamMat);
+        beam.position.set(0, 0, 14);
+        beam.rotation.x = Math.PI / 2;
+        headGroup.add(beam);
+
+        wtGroup.add(headGroup);
+        ctx.scene.add(wtGroup);
+
+        ctx.campaignDecorations.spotlights.push({
+          towerGroup: wtGroup,
+          headGroup: headGroup,
+          spotlight: spotlight,
+          target: spotTarget,
+          beam: beam,
+          x: td.x,
+          z: td.z,
+          baseAngle: td.baseAngle,
+          sweepSpeed: 0.75 + idx * 0.25,
+          sweepRange: 20
+        });
+
+        register(ctx, 'watchtower-base', td.x, td.z, 2.0, 2.0, 0, 0.2, 12.0);
+      });
+
+      // --- 3. DAMAGE-DEALING NEON RADIOACTIVE SLAG PUDDLES ---
+      const puddles = [
+        { x: 35, z: 15, r: 6.0 },
+        { x: 55, z: 5, r: 7.2 },
+        { x: 65, z: -15, r: 8.5 }
+      ];
+
+      puddles.forEach((p) => {
+        const pGeom = new THREE.CylinderGeometry(p.r, p.r, 0.04, 16);
+        const pMat = new THREE.MeshStandardMaterial({
+          color: 0x39ff14,
+          emissive: 0x1fad0a,
+          emissiveIntensity: 2.8,
+          transparent: true,
+          opacity: 0.6,
+          roughness: 0.1,
+          metalness: 0.1
+        });
+        const pMesh = new THREE.Mesh(pGeom, pMat);
+        pMesh.position.set(p.x, 0.015, p.z);
+        ctx.scene.add(pMesh);
+
+        ctx.campaignDecorations.slagPuddles.push({
+          x: p.x,
+          z: p.z,
+          radius: p.r,
+          mesh: pMesh
+        });
+      });
+
+      // --- 4. ELECTRIC SHOCK PLASMA ARCS (FENCES) ---
+      const fenceDefs = [
+        { x1: -95, z1: -10, x2: -60, z2: -10 },
+        { x1: -20, z1: -75, x2: 20, z2: -75 }
+      ];
+
+      fenceDefs.forEach((fd) => {
+        const fenceGroup = new THREE.Group();
+
+        const postGeom = new THREE.CylinderGeometry(0.28, 0.28, 4.0, 8);
+        const postMat = new THREE.MeshStandardMaterial({ color: 0x4f5d75, metalness: 0.9, roughness: 0.15 });
+        
+        const post1 = new THREE.Mesh(postGeom, postMat);
+        post1.position.set(fd.x1, 2, fd.z1);
+        post1.castShadow = true;
+        fenceGroup.add(post1);
+
+        const post2 = new THREE.Mesh(postGeom, postMat);
+        post2.position.set(fd.x2, 2, fd.z2);
+        post2.castShadow = true;
+        fenceGroup.add(post2);
+
+        const capMat = new THREE.MeshStandardMaterial({ color: 0x00f0ff, emissive: 0x00d0ff, emissiveIntensity: 2.8 });
+        const capGeom = new THREE.SphereGeometry(0.38, 8, 8);
+        
+        const cap1 = new THREE.Mesh(capGeom, capMat);
+        cap1.position.set(fd.x1, 4.05, fd.z1);
+        fenceGroup.add(cap1);
+
+        const cap2 = new THREE.Mesh(capGeom, capMat);
+        cap2.position.set(fd.x2, 4.05, fd.z2);
+        fenceGroup.add(cap2);
+
+        const dx = fd.x2 - fd.x1;
+        const dz = fd.z2 - fd.z1;
+        const length = Math.sqrt(dx*dx + dz*dz);
+        
+        const plasmaGeom = new THREE.CylinderGeometry(0.09, 0.09, length, 8);
+        const plasmaMat = new THREE.MeshStandardMaterial({
+          color: 0x00ffff,
+          emissive: 0x00a8ff,
+          emissiveIntensity: 3.5,
+          transparent: true,
+          opacity: 0.7
+        });
+        
+        const plasma = new THREE.Mesh(plasmaGeom, plasmaMat);
+        plasma.position.set((fd.x1 + fd.x2)/2, 2.5, (fd.z1 + fd.z2)/2);
+        plasma.rotation.z = Math.PI / 2;
+        if (dz !== 0) {
+          plasma.rotation.y = Math.atan2(-dz, dx);
+        }
+        fenceGroup.add(plasma);
+
+        const fenceLight = new THREE.PointLight(0x00d0ff, 1.4, 15);
+        fenceLight.position.set((fd.x1 + fd.x2)/2, 2.5, (fd.z1 + fd.z2)/2);
+        fenceGroup.add(fenceLight);
+
+        ctx.scene.add(fenceGroup);
+
+        ctx.campaignDecorations.electricFences.push({
+          x1: fd.x1,
+          z1: fd.z1,
+          x2: fd.x2,
+          z2: fd.z2,
+          plasmaMesh: plasma,
+          light: fenceLight,
+          length: length
+        });
+
+        register(ctx, 'electric-fence', (fd.x1 + fd.x2)/2, (fd.z1 + fd.z2)/2, Math.abs(dx) > 0 ? length : 1.2, Math.abs(dz) > 0 ? length : 1.2, 0, 0.1, 4.0);
+      });
+
+      // --- 5. STEAM VENT GRATES & FUEL BARRELS ---
+      const vents = [
+        { x: 10, z: 55 },
+        { x: -45, z: 25 },
+        { x: -75, z: -25 }
+      ];
+
+      vents.forEach((v) => {
+        const grateMat = new THREE.MeshStandardMaterial({ color: 0x1e272e, metalness: 0.9, roughness: 0.45 });
+        const grate = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.04, 1.6), grateMat);
+        grate.position.set(v.x, 0.005, v.z);
+        ctx.scene.add(grate);
+
+        const pGroup = new THREE.Group();
+        pGroup.position.set(v.x, 0.05, v.z);
+        ctx.scene.add(pGroup);
+
+        ctx.campaignDecorations.steamVents.push({
+          x: v.x,
+          z: v.z,
+          grate: grate,
+          group: pGroup,
+          particles: [],
+          spawnTimer: 0
+        });
+      });
+
+      // Rubble and Fuel Barrels
+      const environmentalProps = [
+        { x: -35, z: 45, type: 'barrel', burning: true },
+        { x: -36.5, z: 43.5, type: 'barrel', burning: false },
+        { x: 25, z: 10, type: 'rubble' },
+        { x: 27, z: 8, type: 'rubble' },
+        { x: -5, z: -60, type: 'rubble' }
+      ];
+
+      environmentalProps.forEach((ep) => {
+        if (ep.type === 'barrel') {
+          const bMat = new THREE.MeshStandardMaterial({ color: ep.burning ? 0xe74c3c : 0x2c3e50, metalness: 0.8, roughness: 0.3 });
+          const bMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.4, 10), bMat);
+          bMesh.position.set(ep.x, 0.7, ep.z);
+          bMesh.castShadow = true;
+          ctx.scene.add(bMesh);
+          
+          if (ep.burning) {
+            const fireLight = new THREE.PointLight(0xff5722, 1.5, 12);
+            fireLight.position.set(ep.x, 1.4, ep.z);
+            ctx.scene.add(fireLight);
+
+            ctx.campaignDecorations.steamVents.push({
+              x: ep.x,
+              z: ep.z,
+              isFire: true,
+              light: fireLight,
+              spawnTimer: 0,
+              particles: [],
+              group: fireLight
+            });
+          }
+          register(ctx, 'barrel', ep.x, ep.z, 1.0, 1.0, 0, 0.1, 1.4);
+        } else {
+          const rMat = new THREE.MeshStandardMaterial({ color: 0x57606f, roughness: 0.9 });
+          const rMesh = new THREE.Mesh(new THREE.BoxGeometry(0.8 + Math.random()*0.6, 0.4 + Math.random()*0.4, 0.8 + Math.random()*0.6), rMat);
+          rMesh.position.set(ep.x, 0.2, ep.z);
+          rMesh.rotation.set(Math.random()*0.3, Math.random()*Math.PI, Math.random()*0.3);
+          rMesh.castShadow = true;
+          ctx.scene.add(rMesh);
+          register(ctx, 'rubble', ep.x, ep.z, 1.2, 1.2, 0, 0.1, 0.8);
+        }
+      });
+
+      // --- 6. FLICKERING BROKEN INDUSTRIAL WALL SPOTLIGHTS ---
+      const brokenLights = [
+        { x: -18, y: 4.5, z: 30, color: 0xff7700, intensity: 2.2 }, // Amber sputtering lamp near center vertical L-wall
+        { x: 42, y: 3.5, z: 20, color: 0x39ff14, intensity: 2.5 },  // Toxic green sputtering lamp near building / chemical storage tanks
+        { x: 20, y: 4.5, z: -48, color: 0x00f0ff, intensity: 2.2 }  // Cold cyan sputtering lamp near turret alley wall
+      ];
+
+      brokenLights.forEach((bl, idx) => {
+        const fixtureGroup = new THREE.Group();
+        fixtureGroup.position.set(bl.x, bl.y, bl.z);
+
+        // Metal support mount arm
+        const armMat = new THREE.MeshStandardMaterial({ color: 0x1e272e, metalness: 0.8, roughness: 0.4 });
+        const arm = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.2, 0.2), armMat);
+        arm.position.set(0, 0, 0);
+        fixtureGroup.add(arm);
+
+        // Light cone fixture housing
+        const coneGeom = new THREE.CylinderGeometry(0.1, 0.4, 0.8, 8);
+        const cone = new THREE.Mesh(coneGeom, armMat);
+        cone.position.set(0.4, -0.3, 0);
+        cone.rotation.z = -Math.PI / 4; // tilt downwards
+        fixtureGroup.add(cone);
+
+        // Glowing bulb mesh
+        const bulbMat = new THREE.MeshStandardMaterial({ 
+          color: bl.color, 
+          emissive: bl.color, 
+          emissiveIntensity: 2.5,
+          transparent: true,
+          opacity: 0.9 
+        });
+        const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.28, 8, 8), bulbMat);
+        bulb.position.set(0.55, -0.45, 0);
+        fixtureGroup.add(bulb);
+
+        // Sputtering point light source
+        const light = new THREE.PointLight(bl.color, bl.intensity, 18, 1.2);
+        light.position.set(0.55, -0.5, 0);
+        light.castShadow = true;
+        fixtureGroup.add(light);
+
+        ctx.scene.add(fixtureGroup);
+
+        ctx.campaignDecorations.flickeringLights.push({
+          mesh: fixtureGroup,
+          bulb: bulb,
+          light: light,
+          baseIntensity: bl.intensity,
+          baseEmissive: 2.5,
+        });
+      });
 
       // Pickups as specified in drawing:
       // Pickable Weapon 1: x = 0, z = 75

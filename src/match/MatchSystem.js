@@ -135,6 +135,7 @@ export function startMatch(ctx, materials, options, physics) {
   ctx.match.playerName = options.playerName || 'Player';
   ctx.match.enabledWeapons = new Set(options.enabledWeapons);
   ctx.match.nextName = 0;
+  ctx.match.isCampaign = !!options.isCampaign;
   ctx.match.playerRewards = {
     turretHits: { exp: 0, gold: 0 },
     weaponHits: { exp: 0, gold: 0 },
@@ -166,6 +167,7 @@ export function formatKillLine(killer, victim) {
 
 export function pushKillFeed(ctx, line, color = '#82ffcf') {
   if (!ctx?.match) return;
+  if (ctx.match.isCampaign) return;
   ctx.match.killFeed.unshift({ line, color, time: 5 });
   ctx.match.killFeed = ctx.match.killFeed.slice(0, 6);
   ctx.match.killBannerQueue.push({ line, color, id: Date.now() + Math.random() });

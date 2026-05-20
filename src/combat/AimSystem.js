@@ -31,7 +31,7 @@ function screenDistancePx(a, b) {
 }
 
 function validEnemy(ctx, player, entity) {
-  return entity?.vehicle
+  return (entity?.vehicle || entity?.isCampaignEnemy)
     && entity.teamId !== player.teamId
     && !entity.health?.dead
     && distance2D(player.transform, entity.transform) <= LOCK_RANGE;
