@@ -87,7 +87,7 @@ export const garagePartCatalog = {
   ],
   cabin: [
     { id: 'aero-canopy', name: 'Aero Canopy', blurb: 'Slim glass canopy.', size: { w: 1.18, h: 0.72, d: 1.34 }, offset: { x: 0, y: 0, z: 0 }, stats: { maxForwardSpeed: 0.8 }, style: 'aero' },
-    { id: 'command-cab', name: 'Command Cab', blurb: 'Tall tactical cockpit.', size: { w: 1.42, h: 0.86, d: 1.22 }, offset: { x: 0, y: 0.04, z: 0.04 }, stats: { maxHealth: 10, turretTurnRate: 0.6 }, style: 'command' },
+    { id: 'command-cab', name: 'Command Cab', blurb: 'Tall cockpit.', size: { w: 1.42, h: 0.86, d: 1.22 }, offset: { x: 0, y: 0.04, z: 0.04 }, stats: { maxHealth: 10, turretTurnRate: 0.6 }, style: 'command' },
     { id: 'split-cockpit', name: 'Split Cockpit', blurb: 'Twin intakes and hard edges.', size: { w: 1.56, h: 0.68, d: 1.44 }, offset: { x: 0, y: -0.02, z: -0.02 }, stats: { acceleration: 0.45, steerResponse: 0.6 }, style: 'split' },
   ],
   wheel: [
@@ -165,7 +165,7 @@ export const garagePartCatalog = {
     { id: 'desert-camo', name: 'Desert Camo', blurb: 'Dusty broken-field camouflage.', texture: 'camo', colors: ['#a47b45', '#f0d9a2', '#ffcc66'], stats: { rollingFriction: -0.15 } },
     { id: 'neon-graffiti', name: 'Neon Graffiti', blurb: 'Spray paint chaos over dark panels.', texture: 'graffiti', colors: ['#151024', '#f4f7fb', '#f659ff'], stats: { turretTurnRate: 0.2 } },
     { id: 'chrome-flake', name: 'Chrome Flake', blurb: 'Bright metallic flake sparkle.', texture: 'flake', colors: ['#dfe6eb', '#101820', '#7df9ff'], stats: { maxForwardSpeed: 0.15, steerRate: 0.02 } },
-    { id: 'matte-black-ops', name: 'Matte Black Ops', blurb: 'Dead-matte tactical scuffs.', texture: 'matte', colors: ['#06080a', '#4a5158', '#82ffcf'], stats: { turretReloadTime: -0.02 } },
+    { id: 'matte-black-ops', name: 'Matte Black Ops', blurb: 'Dead-matte scuffs.', texture: 'matte', colors: ['#06080a', '#4a5158', '#82ffcf'], stats: { turretReloadTime: -0.02 } },
     { id: 'circuit-board', name: 'Circuit Board', blurb: 'Printed traces across deep green armor.', texture: 'circuit', colors: ['#0c2f24', '#82ffcf', '#ffcc66'], stats: { turretTurnRate: 0.25 } },
     { id: 'tiger-burn', name: 'Tiger Burn', blurb: 'Hot orange tiger tears.', texture: 'tiger', colors: ['#1a0d08', '#ff8f3d', '#ffcc66'], stats: { acceleration: 0.2 } },
     { id: 'police-interceptor', name: 'Police Interceptor', blurb: 'Clean law-runner blocks and lights.', texture: 'interceptor', colors: ['#f4f7fb', '#101820', '#7df9ff'], stats: { brakeDeceleration: 0.4 } },
@@ -217,7 +217,7 @@ export function refreshGarageCatalog() {
 
 export const garageMaterialStyles = [
   { id: 'metal', name: 'Metal', blurb: 'Glossy automotive metal with clear coat.' },
-  { id: 'matte', name: 'Non-shiny', blurb: 'Flat paint with soft, tactical reflections.' },
+  { id: 'matte', name: 'Non-shiny', blurb: 'Flat paint with soft reflections.' },
   { id: 'carbon', name: 'Carbon', blurb: 'Carbon weave surface with crisp contrast.' },
   { id: 'glow', name: 'Glowing', blurb: 'Emissive paint that carries the accent color.' },
 ];

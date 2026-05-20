@@ -33,42 +33,42 @@
         </aside>
         <div class="main-menu-content">
           <div class="main-menu-brand">
-            <p class="main-menu-kicker">Neural ignition interface</p>
+            <p class="main-menu-kicker">Ready to play</p>
             <h1 data-text="ETHER DRIVER"><span>ETHER</span> <span>DRIVER</span></h1>
-            <p>v1.0 // cyber combat chassis online</p>
+            <p>v1.0 // select your vehicle</p>
           </div>
           <div class="main-menu-nav">
             <button id="navCampaignButton" type="button" class="main-nav-btn disabled" aria-disabled="true">
               <span class="nav-btn-index">00</span>
-              <span class="nav-btn-copy"><b>CAMPAIGN</b><small>WIP // locked simulation</small></span>
+              <span class="nav-btn-copy"><b>CAMPAIGN</b><small>WIP // coming soon</small></span>
               <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
               <span class="nav-btn-gear"></span>
               <span class="nav-btn-trail"></span>
             </button>
             <button id="navCustomMatchButton" type="button" class="main-nav-btn primary">
               <span class="nav-btn-index">01</span>
-              <span class="nav-btn-copy"><b>CUSTOM MATCH</b><small>deploy arena protocol</small></span>
+              <span class="nav-btn-copy"><b>CUSTOM MATCH</b><small>start game</small></span>
               <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
               <span class="nav-btn-gear"></span>
               <span class="nav-btn-trail"></span>
             </button>
             <button id="navVehicleBuildsButton" type="button" class="main-nav-btn">
               <span class="nav-btn-index">02</span>
-              <span class="nav-btn-copy"><b>VEHICLE BUILDS</b><small>tune chassis memory</small></span>
+              <span class="nav-btn-copy"><b>VEHICLE BUILDS</b><small>customize vehicles</small></span>
               <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
               <span class="nav-btn-gear"></span>
               <span class="nav-btn-trail"></span>
             </button>
             <button id="navPremiumShopButton" type="button" class="main-nav-btn">
               <span class="nav-btn-index">03</span>
-              <span class="nav-btn-copy"><b>PREMIUM SHOP</b><small>black market uplink</small></span>
+              <span class="nav-btn-copy"><b>PREMIUM SHOP</b><small>store</small></span>
               <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
               <span class="nav-btn-gear"></span>
               <span class="nav-btn-trail"></span>
             </button>
             <button id="navAchievementsButton" type="button" class="main-nav-btn">
               <span class="nav-btn-index">04</span>
-              <span class="nav-btn-copy"><b>LIFETIME ACHIEVEMENTS</b><small>combat record archive</small></span>
+              <span class="nav-btn-copy"><b>LIFETIME ACHIEVEMENTS</b><small>stats and records</small></span>
               <span class="nav-btn-crosshair"><i></i><i></i><i></i></span>
               <span class="nav-btn-gear"></span>
               <span class="nav-btn-trail"></span>
@@ -122,7 +122,7 @@
           </header>
           <div class="modal-body">
             <p class="weapons-setup-subtitle" style="margin-bottom: 8px; font-size: 13px; color: rgba(255, 255, 255, 0.65);">
-              Configure which advanced munitions spawn across the tactical grid.
+              Configure which items spawn across the map.
             </p>
             <div id="weaponsGrid" class="weapons-grid-setup"></div>
           </div>
@@ -333,34 +333,34 @@
 
                 <div class="setup-tactical-hud">
                   <div class="hud-scanning-line"></div>
-                  <span class="hud-ticker-label">TACTICAL FEED: MATCH RULE MATRIX</span>
-                  <p id="matchRulesExplanation" class="hud-ticker-text">ARENA COMBAT COMMENCES UNDER REGULATED WIN SPECIFICATIONS. EXCEEDING THE ENGAGEMENT LIMIT INITIATES AUTOMATIC SECTOR DECLASSIFICATION AND IMMEDIATE MATCH SUSPENSION.</p>
+                  <span class="hud-ticker-label">GAME RULES: MATCH RULE MATRIX</span>
+                  <p id="matchRulesExplanation" class="hud-ticker-text">MATCH WILL END WHEN A PLAYER REACHES THE KILL LIMIT.</p>
                 </div>
               </div>
 
               <!-- Right Column: Interactive Map Selection -->
               <div class="game-setup-panel map-selection-panel">
-                <h3 class="setup-subtitle">// SELECT THEATER OF OPERATIONS</h3>
+                <h3 class="setup-subtitle">// SELECT MAP</h3>
                 
                 <div class="map-tab-list" role="tablist" aria-label="Select Theater of Operations">
                   <button type="button" class="map-tab-btn selected" data-map-id="city" role="tab" aria-selected="true" aria-controls="map-panel-city">
-                    <span class="tab-kicker">SECTOR 01: URBAN</span>
+                    <span class="tab-kicker">MAP 01: URBAN</span>
                     <b>Megalopolis Mayhem</b>
                   </button>
                   <button type="button" class="map-tab-btn" data-map-id="basin" role="tab" aria-selected="false" aria-controls="map-panel-basin">
-                    <span class="tab-kicker">SECTOR 02: THERMAL</span>
+                    <span class="tab-kicker">MAP 02: THERMAL</span>
                     <b>Doom Basin</b>
                   </button>
                   <button type="button" class="map-tab-btn" data-map-id="outpost" role="tab" aria-selected="false" aria-controls="map-panel-outpost">
-                    <span class="tab-kicker">SECTOR 03: CYBER</span>
+                    <span class="tab-kicker">MAP 03: CYBER</span>
                     <b>Neon Outpost</b>
                   </button>
                   <button type="button" class="map-tab-btn" data-map-id="military" role="tab" aria-selected="false" aria-controls="map-panel-military">
-                    <span class="tab-kicker">SECTOR 04: TACTICAL</span>
+                    <span class="tab-kicker">MAP 04: COMPOUND</span>
                     <b>Military Base</b>
                   </button>
                   <button type="button" class="map-tab-btn" data-map-id="hangar" role="tab" aria-selected="false" aria-controls="map-panel-hangar">
-                    <span class="tab-kicker">SECTOR 05: ELEVATED</span>
+                    <span class="tab-kicker">MAP 05: ELEVATED</span>
                     <b>Elevated Hangar</b>
                   </button>
                 </div>
@@ -374,7 +374,7 @@
                     <div class="map-detail-text">
                       <div class="map-detail-header">
                         <h4>Megalopolis Mayhem</h4>
-                        <span class="map-detail-sector">SECTOR: ACTIVE</span>
+                        <span class="map-detail-sector">STATUS: ACTIVE</span>
                       </div>
                       <p class="map-detail-tagline">High-Density Concrete Block Grids</p>
                       <p class="map-detail-desc">Welcome to the neon-drenched concrete jungle where heavy metal meets heavy wreckage! Symmetrical grid-locked skyscraper blocks, loops, and 4 massive concrete launch ramps. Perfect for mayhem.</p>
@@ -408,7 +408,7 @@
                     <div class="map-detail-text">
                       <div class="map-detail-header">
                         <h4>Doom Basin</h4>
-                        <span class="map-detail-sector danger">SECTOR: THERMAL LIMIT</span>
+                        <span class="map-detail-sector danger">STATUS: THERMAL LIMIT</span>
                       </div>
                       <p class="map-detail-tagline">Industrial Slag Crater & Perimeter Ring-Roads</p>
                       <p class="map-detail-desc">A desolate industrial wasteland crater packed with elevated perimeter loops and giant dual jumping ramps that launch vehicles directly across the central boiling magma pit. Watch your slides!</p>
@@ -442,7 +442,7 @@
                     <div class="map-detail-text">
                       <div class="map-detail-header">
                         <h4>Neon Outpost</h4>
-                        <span class="map-detail-sector warning">SECTOR: STAGED</span>
+                        <span class="map-detail-sector warning">STATUS: STAGED</span>
                       </div>
                       <p class="map-detail-tagline">Laboratory Zoning & Hyper-Speed Turbo Grids</p>
                       <p class="map-detail-desc">A futuristic laboratory sector with high-voltage reactor coils, barricade grids, intensive turbo-tile patterns, hyper-speed jump grids, and narrow channels. Maximum arcing and high speed!</p>
@@ -476,10 +476,10 @@
                     <div class="map-detail-text">
                       <div class="map-detail-header">
                         <h4>Military Base</h4>
-                        <span class="map-detail-sector warning">SECTOR: SECURED</span>
+                        <span class="map-detail-sector warning">STATUS: SECURED</span>
                       </div>
-                      <p class="map-detail-tagline">Tactical Barracks, Blast Walls & Bubbling Acid</p>
-                      <p class="map-detail-desc">A heavily guarded high-tech tactical base featuring reinforced perimeter blast walls, warehouses, checkpoints, launch ramps, and a bubbling green Acid Pool that melts vehicle armor in seconds.</p>
+                      <p class="map-detail-tagline">Barracks, Blast Walls & Bubbling Acid</p>
+                      <p class="map-detail-desc">A guarded high-tech base featuring reinforced perimeter blast walls, warehouses, checkpoints, launch ramps, and a bubbling green Acid Pool that melts vehicle armor in seconds.</p>
                       
                       <div class="map-spec-grid">
                         <div class="map-spec-item">
@@ -510,7 +510,7 @@
                     <div class="map-detail-text">
                       <div class="map-detail-header">
                         <h4>Elevated Hangar</h4>
-                        <span class="map-detail-sector danger">SECTOR: VERTICAL</span>
+                        <span class="map-detail-sector danger">STATUS: VERTICAL</span>
                       </div>
                       <p class="map-detail-tagline">Multi-Level Decks, Long Ramps & Lava Pits</p>
                       <p class="map-detail-desc">A colossal aerospace hangar. Speed up extremely long, inclined metal ramps to access elevated concrete platform rooftops (5m and 10m high) or fall down directly into the boiling lava gaps below!</p>

@@ -105,7 +105,7 @@ export const mapRegistry = {
         ctx.beacons.push({ mesh: beaconMesh, light: beaconLight, timer: Math.random() * Math.PI });
       });
 
-      // Symmetrical Tactical Launch Ramps (4 Ramps pointing to center crossroad)
+      // Symmetrical Launch Ramps (4 Ramps pointing to center crossroad)
       addRamp(ctx, materials, -55, 0, 14, 25, Math.PI * 0.5, 0.1, 7.5); // points East (into center)
       addRamp(ctx, materials, 55, 0, 14, 25, -Math.PI * 0.5, 0.1, 7.5); // points West (into center)
       addRamp(ctx, materials, 0, -55, 14, 25, 0, 0.1, 7.5); // points South (into center)
@@ -428,7 +428,7 @@ export const mapRegistry = {
         [0, 150, 50, 12, 12, materials.windows],
       ].forEach((b) => addBuilding(ctx, materials, ...b));
 
-      // Dual Tactical launch ramps bridging the reactor cores
+      // Dual launch ramps bridging the reactor cores
       addRamp(ctx, materials, -75, -75, 12, 22, Math.PI * 0.25, 0.1, 6.0); // angle ramp
       addRamp(ctx, materials, 75, 75, 12, 22, -Math.PI * 0.75, 0.1, 6.0); // angle ramp
 
@@ -488,10 +488,10 @@ export const mapRegistry = {
   },
   military: {
     id: 'military',
-    name: 'Sector 04: Tactical Compound',
+    name: 'Map 04: Compound',
     size: 440,
     tagline: 'Armored Blast Walls & Central Acid Pool',
-    description: 'Welcome to the Tactical Military Compound! A top-secret combat zone surrounded by olive-green armored blast walls. Features defensive security checkpoints, high-speed launch ramps, and a bubbling green Acid Pool at the center that eats away at heavy chassis armor. Watch your step and maintain high velocity!',
+    description: 'Welcome to the Compound! A zone surrounded by olive-green walls. Features checkpoints, high-speed launch ramps, and a bubbling green Acid Pool at the center that eats away at heavy chassis armor. Watch your step and maintain high velocity!',
     build: function (ctx, materials) {
       const size = this.size;
       ctx.currentMapSize = size;

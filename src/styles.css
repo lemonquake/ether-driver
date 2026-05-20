@@ -32,7 +32,8 @@ button {
 .quick-tips-toggle {
   position: fixed;
   top: 12px;
-  left: 12px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 1210;
   min-height: 32px;
   padding: 6px 10px;
@@ -49,8 +50,8 @@ button {
 }
 
 .quick-tips-toggle.off {
-  border-color: rgb(255 255 255 / 18%);
-  color: rgb(255 255 255 / 58%);
+  border-color: rgb(255 95 125 / 45%);
+  color: #ff5f7d;
 }
 
 .quick-tips-layer {
@@ -5853,7 +5854,7 @@ body {
     repeating-linear-gradient(0deg, transparent 0px, transparent 1px, rgba(0, 0, 0, 0.18) 1px, rgba(0, 0, 0, 0.18) 3px) 0 0 / 100% 3px,
     /* 12px micro holographic dot grid */
     radial-gradient(circle, rgba(113, 247, 255, 0.05) 1.2px, transparent 1.2px) 0 0 / 12px 12px,
-    /* Deep space dark tactical panel gradient background */
+    /* Deep space dark panel gradient background */
     linear-gradient(180deg, rgba(6, 12, 20, 0.98) 0%, rgba(2, 4, 8, 0.99) 100%) !important;
   box-shadow:
     inset 0 0 0 1px rgba(255, 255, 255, 0.06),
@@ -5886,7 +5887,7 @@ body {
 }
 
 /* ==========================================================================
-   GLOWING TACTICAL OPTION BUTTONS & SELECTION HIGHLIGHTS
+   GLOWING OPTION BUTTONS & SELECTION HIGHLIGHTS
    ========================================================================== */
 
 /* Overhaul the unselected state for option buttons (Kill limit, Team Kill limit, and Team counts) */

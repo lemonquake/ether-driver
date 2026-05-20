@@ -26,7 +26,7 @@ export const premiumPartDefinitions = [
   { id: 'cab-rar-01', type: 'cabin', rarity: 'rare', name: 'Armored Command', baseStyle: 'command-cab', price: 300, stats: { maxHealth: 15 }, blurb: 'Bulletproof glass.' },
   { id: 'cab-del-01', type: 'cabin', rarity: 'deluxe', name: 'Split Stream', baseStyle: 'split-cockpit', price: 900, stats: { acceleration: 0.8, steerResponse: 0.4 }, blurb: 'Dual driver pods.' },
   { id: 'cab-eli-01', type: 'cabin', rarity: 'elite', name: 'Void Canopy', baseStyle: 'aero-canopy', price: 2500, stats: { maxForwardSpeed: 1.5, turretTurnRate: 0.5 }, blurb: 'Lightweight void-glass.' },
-  { id: 'cab-xf-01', type: 'cabin', rarity: 'xfactor', name: 'Overlord Cab', baseStyle: 'command-cab', price: 6500, stats: { maxHealth: 35, turretTurnRate: 1.0 }, blurb: 'Tactical superiority.' },
+  { id: 'cab-xf-01', type: 'cabin', rarity: 'xfactor', name: 'Overlord Cab', baseStyle: 'command-cab', price: 6500, stats: { maxHealth: 35, turretTurnRate: 1.0 }, blurb: 'Excellent handling.' },
   { id: 'cab-eth-01', type: 'cabin', rarity: 'ether', name: 'ETHER NEURAL', baseStyle: 'split-cockpit', price: 20000, stats: { acceleration: 2.0, maxHealth: 20, maxForwardSpeed: 2.0 }, blurb: 'Mind-machine interface cockpit.' },
 
   // --- WHEEL ---

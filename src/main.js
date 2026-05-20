@@ -263,12 +263,12 @@ function rebuildGameMap(mapId) {
 
     ctx.scene.fog = new THREE.FogExp2(0x0a0312, 0.0075);
   } else if (mapId === 'military') {
-    // High-fidelity Tactical Military Green Skybox
-    skyGrad.addColorStop(0, '#040806');     // deep tactical void
-    skyGrad.addColorStop(0.35, '#07120a');  // tactical olive green
+    // High-fidelity Green Skybox
+    skyGrad.addColorStop(0, '#040806');     // deep void
+    skyGrad.addColorStop(0.35, '#07120a');  // olive green
     skyGrad.addColorStop(0.55, '#0f2413');  // dark laser green
     skyGrad.addColorStop(0.72, '#183c1d');  // military green core
-    skyGrad.addColorStop(0.85, '#2f5b35');  // bright tactical green horizon
+    skyGrad.addColorStop(0.85, '#2f5b35');  // bright green horizon
     skyGrad.addColorStop(1.0, '#040806');   // deep ground shadow
 
     // Reflection Map Gradient
@@ -571,7 +571,7 @@ function rebuildGameMap(mapId) {
     skyCtx.stroke();
     skyCtx.shadowBlur = 0; // Reset
   } else if (mapId === 'military') {
-    // 1. Bubbling tactical green stars
+    // 1. Bubbling green stars
     skyCtx.fillStyle = 'rgba(85, 255, 120, 0.65)';
     for (let i = 0; i < 180; i++) {
       const sx = Math.random() * 2048;
@@ -582,7 +582,7 @@ function rebuildGameMap(mapId) {
       skyCtx.fill();
     }
 
-    // 2. Giant holographic tactical radar crosshair scope
+    // 2. Giant holographic radar crosshair scope
     const rx = 1500;
     const ry = 380;
     const rd = 120;
@@ -1202,7 +1202,7 @@ const weaponDescriptions = {
   'gravity-imploder': 'Localized gravity distortion that pulls all vehicles violently to the center.',
   'rail-slug': 'Hyper-velocity kinetic rounds that punch through multiple targets instantly.',
   'toxic-cask': 'Hazard barrel that bounces and spills acidic chemicals upon rupture.',
-  'devastator-nuke': 'Slow, devastating tactical payload with extreme blast radius.'
+  'devastator-nuke': 'Slow, devastating payload with extreme blast radius.'
 };
 
 function renderWeaponsSetup() {
