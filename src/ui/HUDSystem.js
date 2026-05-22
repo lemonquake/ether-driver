@@ -42,18 +42,28 @@ export function createHUD(ctx) {
     scoreboardBody: document.querySelector('#scoreboardBody'),
     matchMenu: document.querySelector('#matchMenu'),
     teamSetupStep: document.querySelector('#teamSetupStep'),
-    continueToGarageButton: document.querySelector('#continueToGarageButton'),
-    backToTeamButton: document.querySelector('#backToTeamButton'),
+    continueToGarageButton: document.querySelector('#unifiedContinueButton'),
+    backToTeamButton: document.querySelector('#unifiedBackButton'),
     playerNameInput: document.querySelector('#playerNameInput'),
     teamBuilder: document.querySelector('#teamBuilder'),
     garagePanel: document.querySelector('#garagePanel'),
-    garageTitle: document.querySelector('#garageTitle'),
+    garageTitle: document.querySelector('#unifiedHeaderTitle'),
     garagePreview: document.querySelector('#garagePreview'),
     garageControls: document.querySelector('#garageControls'),
     garageStats: document.querySelector('#garageStats'),
+    garageAppearancePanel: document.querySelector('#garageAppearancePanel'),
     teamCountButtons: [...document.querySelectorAll('[data-team-count]')],
     weaponToggles: [...document.querySelectorAll('[data-weapon-toggle]')],
-    startMatchButton: document.querySelector('#startMatchButton'),
+    startMatchButton: document.querySelector('#unifiedContinueButton'),
+    unifiedBackButton: document.querySelector('#unifiedBackButton'),
+    unifiedContinueButton: document.querySelector('#unifiedContinueButton'),
+    unifiedShopButton: document.querySelector('#unifiedShopButton'),
+    hudProfileLevel: document.querySelector('#hudProfileLevel'),
+    hudProfileExpFill: document.querySelector('#hudProfileExpFill'),
+    hudProfileExpText: document.querySelector('#hudProfileExpText'),
+    hudProfileGoldText: document.querySelector('#hudProfileGoldText'),
+    hudProfilePts: document.querySelector('#hudProfilePts'),
+    hudProfilePtsWrapper: document.querySelector('#hudProfilePtsWrapper'),
     resultsOverlay: document.querySelector('#resultsOverlay'),
     resultsTitle: document.querySelector('#resultsTitle'),
     resultsRewards: document.querySelector('#resultsRewards'),
@@ -68,8 +78,8 @@ export function createHUD(ctx) {
     settingsMenu: document.querySelector('#settingsMenu'),
     closeSettingsButton: document.querySelector('#closeSettingsButton'),
     gameSetupStep: document.querySelector('#gameSetupStep'),
-    continueToGameButton: document.querySelector('#continueToGameButton'),
-    backToGarageButton: document.querySelector('#backToGarageButton'),
+    continueToGameButton: document.querySelector('#unifiedContinueButton'),
+    backToGarageButton: document.querySelector('#unifiedBackButton'),
     mvpPedestal: document.querySelector('#mvpPedestal'),
     mvpName: document.querySelector('#mvpName'),
     mvpTeam: document.querySelector('#mvpTeam'),
@@ -560,7 +570,16 @@ export function updateHUD(ctx, ui, dt = 0.016) {
   ui.healthFill.style.width = `${Math.max(0, player.health.current / player.health.max * 100)}%`;
   ui.healthFill.style.setProperty('--team-color', player.teamColor || '#82ffcf');
   ui.healthFill.parentElement?.style.setProperty('--team-color', player.teamColor || '#82ffcf');
-  ui.armorText.textContent = `${player.displayName || 'PLAYER'} · ${player.teamName || 'TEAM'} · ${player.vehicle.armorType.toUpperCase()}`;
+
+  const isInvulnerable = player.respawn?.invulnerableTimer > 0;
+  if (ui.healthFill) {
+    ui.healthFill.classList.toggle('invulnerable-pulse', isInvulnerable);
+  }
+  if (isInvulnerable) {
+    ui.armorText.textContent = `⚡ INVULNERABLE (${Math.ceil(player.respawn.invulnerableTimer)}s) ⚡ · ${player.vehicle.armorType.toUpperCase()}`;
+  } else {
+    ui.armorText.textContent = `${player.displayName || 'PLAYER'} · ${player.teamName || 'TEAM'} · ${player.vehicle.armorType.toUpperCase()}`;
+  }
 
   // Turret ammo — show in drive mode text area
   const turret = player.weaponSlots.turret;

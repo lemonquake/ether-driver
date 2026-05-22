@@ -4,6 +4,112 @@ import { weaponCatalog } from '../data/weapons.js';
 import { applyDamage, applyImpactPush } from './DamageSystem.js';
 import { applyTurretEnhancementVisual } from '../vehicles/VehicleFactory.js';
 
+export const PROJECTILE_COSMETICS = {
+  'proj-standard': {
+    color: null,
+    trailColor: null,
+    trailType: null,
+    build: null,
+    update: null
+  },
+  'proj-neon-plasma': {
+    color: 0x00f0ff,
+    trailColor: 0x00f0ff,
+    trailType: 'plasma',
+    build: (mesh) => {
+      const ringGeom = new THREE.TorusGeometry(1.4, 0.25, 8, 24);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x00ffff });
+      const ring = new THREE.Mesh(ringGeom, ringMat);
+      ring.name = 'ring';
+      mesh.add(ring);
+    },
+    update: (mesh, dt, age) => {
+      const ring = mesh.getObjectByName('ring');
+      if (ring) {
+        ring.rotation.x += dt * 4.5;
+        ring.rotation.y += dt * 3.0;
+        const scaleVal = 1.0 + Math.sin(age * 12) * 0.15;
+        mesh.scale.setScalar(scaleVal * 0.25);
+      }
+    }
+  },
+  'proj-fireball': {
+    color: 0xff4400,
+    trailColor: 0xffaa00,
+    trailType: 'fire',
+    build: (mesh) => {
+      const coreGeom = new THREE.IcosahedronGeometry(1.2, 0);
+      const coreMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+      const core = new THREE.Mesh(coreGeom, coreMat);
+      core.name = 'core';
+      mesh.add(core);
+    },
+    update: (mesh, dt, age) => {
+      const core = mesh.getObjectByName('core');
+      if (core) {
+        core.rotation.x += dt * 3.0;
+        core.rotation.z += dt * 2.0;
+        const scaleVal = 1.0 + Math.sin(age * 18) * 0.2;
+        core.scale.setScalar(scaleVal);
+      }
+    }
+  },
+  'proj-electric-star': {
+    color: 0xccff00,
+    trailColor: 0xeeff88,
+    trailType: 'spark',
+    build: (mesh) => {
+      const coneGeom1 = new THREE.ConeGeometry(0.8, 1.4, 4);
+      const coneGeom2 = new THREE.ConeGeometry(0.8, 1.4, 4);
+      coneGeom2.rotateX(Math.PI);
+      const mat = new THREE.MeshBasicMaterial({ color: 0xeeff88 });
+      const c1 = new THREE.Mesh(coneGeom1, mat);
+      const c2 = new THREE.Mesh(coneGeom2, mat);
+      c1.name = 'c1';
+      c2.name = 'c2';
+      mesh.add(c1, c2);
+    },
+    update: (mesh, dt, age) => {
+      const c1 = mesh.getObjectByName('c1');
+      const c2 = mesh.getObjectByName('c2');
+      if (c1 && c2) {
+        c1.rotation.y += dt * 10.0;
+        c2.rotation.y += dt * 10.0;
+        const crackle = 0.8 + Math.random() * 0.4;
+        mesh.scale.setScalar(crackle * 0.25);
+      }
+    }
+  },
+  'proj-void-ring': {
+    color: 0x330066,
+    trailColor: 0x6633aa,
+    trailType: 'gravity',
+    build: (mesh) => {
+      const ringGeom = new THREE.TorusGeometry(1.3, 0.3, 8, 24);
+      const ringMat = new THREE.MeshBasicMaterial({ color: 0x6633aa });
+      const ring = new THREE.Mesh(ringGeom, ringMat);
+      ring.name = 'ring';
+      
+      const sphereGeom = new THREE.SphereGeometry(0.8, 8, 8);
+      const sphereMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+      const sphere = new THREE.Mesh(sphereGeom, sphereMat);
+      sphere.name = 'sphere';
+      
+      mesh.add(ring, sphere);
+    },
+    update: (mesh, dt, age) => {
+      const ring = mesh.getObjectByName('ring');
+      const sphere = mesh.getObjectByName('sphere');
+      if (ring && sphere) {
+        ring.rotation.x += dt * 5.0;
+        ring.rotation.y += dt * 2.0;
+        const scaleVal = 1.0 + Math.sin(age * 6.0) * 0.15;
+        sphere.scale.setScalar(scaleVal);
+      }
+    }
+  }
+};
+
 function slotReady(slot) {
   if (!slot || slot.cooldown > 0 || slot.isReloading) return false;
   if (slot.magazineSize !== undefined) return slot.ammoInMagazine > 0;
@@ -40,7 +146,7 @@ export function fireWeapon(ctx, physics, owner, slotName, targetPoint, effects) 
   const forward = forwardFromYaw(yaw);
   const start = {
     x: owner.transform.x + forward.x * 2.2,
-    y: slotName === 'turret' ? 1.45 : 0.7,
+    y: (owner.transform.y || 0) + (slotName === 'turret' ? 1.45 : 0.7),
     z: owner.transform.z + forward.z * 2.2,
   };
   if (weapon.id === 'fire-mine') {
@@ -51,6 +157,14 @@ export function fireWeapon(ctx, physics, owner, slotName, targetPoint, effects) 
   const count = weapon.projectileCount || 1;
   const spread = weapon.spread || 0;
   let lastEntity = null;
+
+  const dx = targetPoint.x - start.x;
+  const dz = targetPoint.z - start.z;
+  const dy = (targetPoint.y !== undefined ? targetPoint.y : start.y) - start.y;
+  const dist2D = Math.hypot(dx, dz);
+  const pitch = Math.atan2(dy, dist2D);
+  const cosPitch = Math.cos(pitch);
+  const sinPitch = Math.sin(pitch);
 
   for (let i = 0; i < count; i += 1) {
     const spreadAngle = count > 1 ? (i - (count - 1) / 2) * spread : spread * (Math.random() - 0.5);
@@ -79,28 +193,45 @@ export function fireWeapon(ctx, physics, owner, slotName, targetPoint, effects) 
     }
 
     // Acquire a projectile mesh from the pre-allocated pool (completely zero-lag)
+    let projId = 'proj-standard';
+    if (slotName === 'turret') {
+      projId = owner.vehicle?.customBlueprint?.turretProjectileId || owner.vehicle?.turretProjectileId || 'proj-standard';
+    }
+    const cosmetic = PROJECTILE_COSMETICS[projId] || PROJECTILE_COSMETICS['proj-standard'];
+    const finalColor = cosmetic.color !== null ? cosmetic.color : weapon.color;
+
     let mesh = null;
     if (ctx.projectileMeshPool && ctx.projectileMeshPool.length > 0) {
       mesh = ctx.projectileMeshPool.pop();
       mesh.scale.setScalar(weapon.radius);
-      mesh.material.color.set(weapon.color);
+      mesh.material.color.set(finalColor);
       mesh.position.set(start.x, start.y, start.z);
       mesh.visible = true;
     } else {
       // Fallback in case the pool is depleted (highly unlikely, but safe)
       mesh = new THREE.Mesh(
         new THREE.SphereGeometry(weapon.radius, 8, 8),
-        new THREE.MeshBasicMaterial({ color: weapon.color }),
+        new THREE.MeshBasicMaterial({ color: finalColor }),
       );
       mesh.position.set(start.x, start.y, start.z);
       ctx.scene.add(mesh);
+    }
+
+    // Clear any previous child objects (from prior pooled uses)
+    while (mesh.children.length > 0) {
+      mesh.remove(mesh.children[0]);
+    }
+
+    // Build custom visual geometry if specified
+    if (cosmetic.build) {
+      cosmetic.build(mesh);
     }
 
     // Acquire and activate a light from the pre-allocated pool (completely zero-lag)
     let pLight = null;
     if (ctx.projectileLightPool && ctx.projectileLightPool.length > 0) {
       pLight = ctx.projectileLightPool.pop();
-      pLight.color.set(weapon.color);
+      pLight.color.set(finalColor);
       pLight.intensity = 3.6;
       pLight.distance = 15;
       pLight.decay = 1.8;
@@ -121,9 +252,10 @@ export function fireWeapon(ctx, physics, owner, slotName, targetPoint, effects) 
         armTime: weapon.armTime || 0,
         target: homingTarget,
         pointLight: pLight,
+        turretProjectileId: projId,
       },
       transform: { x: start.x, y: start.y, z: start.z, yaw: aimYawSpread },
-      velocity: { x: dir.x * weapon.speed, y: 0, z: dir.z * weapon.speed },
+      velocity: { x: dir.x * weapon.speed * cosPitch, y: weapon.speed * sinPitch, z: dir.z * weapon.speed * cosPitch },
       renderable: { group: mesh },
       rapierBody: rapier,
     });
@@ -258,6 +390,10 @@ function removeProjectile(ctx, projectile, physics) {
   }
   if (projectile.renderable?.group) {
     const mesh = projectile.renderable.group;
+    // Clear custom children meshes!
+    while (mesh.children.length > 0) {
+      mesh.remove(mesh.children[0]);
+    }
     // Check if this mesh belongs to the pre-allocated pool
     if (mesh.isPooled) {
       mesh.visible = false;
@@ -339,6 +475,13 @@ export function updateWeapons(ctx, physics, dt, effects) {
     const p = projectile.projectile;
     const weapon = p.weapon;
     p.age += dt;
+    
+    // Animate custom projectile
+    const cosmetic = PROJECTILE_COSMETICS[p.turretProjectileId || 'proj-standard'];
+    if (cosmetic && cosmetic.update && projectile.renderable?.group) {
+      cosmetic.update(projectile.renderable.group, dt, p.age);
+    }
+
     if (weapon.homingStrength && p.target && !p.target.health.dead) {
       const targetYaw = angleTo(projectile.transform, p.target.transform);
       const current = Math.atan2(projectile.velocity.x, projectile.velocity.z);
@@ -366,6 +509,11 @@ export function updateWeapons(ctx, physics, dt, effects) {
     if (weapon.id === 'gravity-imploder') trailType = 'gravity';
     if (weapon.id === 'toxic-cask') trailType = 'toxic';
     if (weapon.id === 'rail-slug') trailType = 'spark';
+    
+    if (cosmetic && cosmetic.trailType) {
+      trailType = cosmetic.trailType;
+    }
+    
     effects.emitTrail(projectile.transform.x, projectile.transform.y, projectile.transform.z, trailType);
 
     if (p.age > weapon.lifetime) {

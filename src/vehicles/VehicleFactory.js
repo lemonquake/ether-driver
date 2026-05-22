@@ -1110,6 +1110,7 @@ export function createVehicleEntity(ctx, materials, spec, position, yaw = 0, con
       armorType: def.armorType,
       controlledBy,
       customBlueprint: def.blueprint || null,
+      turretProjectileId: def.blueprint?.turretProjectileId || 'proj-standard',
     },
     transform: { x: position.x, z: position.z, yaw, y: def.stats.rideHeight },
     velocity: { speed: 0, wheelSpin: 0, steer: 0, smokeTimer: 0, collisionCooldown: 0, vehicleCollisionCooldowns: new Map() },

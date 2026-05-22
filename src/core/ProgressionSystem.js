@@ -7,6 +7,7 @@ export const UPGRADE_MAX_LEVELS = {
   firingRate: 20,
   handling: 20,
   acceleration: 20,
+  reverseAcceleration: 20,
 };
 
 const defaultState = {
@@ -20,6 +21,7 @@ const defaultState = {
     firingRate: 0, 
     handling: 0, 
     acceleration: 0, 
+    reverseAcceleration: 0,
     turretColorsUnlocked: false,
     projectileEffectUnlocked: false,
   },

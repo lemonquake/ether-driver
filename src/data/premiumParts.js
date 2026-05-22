@@ -72,4 +72,10 @@ export const premiumPartDefinitions = [
   { id: 'pnt-eli-01', type: 'paintJob', rarity: 'elite', name: 'Blood Lava', baseStyle: 'lava-veins', price: 2200, colors: ['#1a0000', '#ff0000', '#ff6600'], texture: 'lava', stats: { turretReloadTime: -0.1 }, blurb: 'Burning hot.' },
   { id: 'pnt-xf-01', type: 'paintJob', rarity: 'xfactor', name: 'Quantum Grid', baseStyle: 'synthwave-grid', price: 5000, colors: ['#000000', '#00ffcc', '#ff00ff'], texture: 'grid', stats: { maxForwardSpeed: 1.0, turretTurnRate: 0.5 }, blurb: 'Animated gridlines.' },
   { id: 'pnt-eth-01', type: 'paintJob', rarity: 'ether', name: 'ETHER GLOW', baseStyle: 'circuit-board', price: 15000, colors: ['#001a11', '#82ffcf', '#ffffff'], texture: 'circuit', stats: { maxForwardSpeed: 1.5, maxHealth: 10, acceleration: 0.5 }, blurb: 'The signature Ether look.' },
+
+  // --- PROJECTILES ---
+  { id: 'proj-neon-plasma', type: 'turretProjectile', rarity: 'rare', name: 'Neon Plasma Sphere', baseStyle: 'proj-standard', price: 400, stats: { turretTurnRate: 0.4 }, blurb: 'Cyan plasma sphere with rotating ring.' },
+  { id: 'proj-fireball', type: 'turretProjectile', rarity: 'deluxe', name: 'Magma Fireball', baseStyle: 'proj-standard', price: 1500, stats: { crashDamageResistance: 0.1 }, blurb: 'Fiery magma star.' },
+  { id: 'proj-electric-star', type: 'turretProjectile', rarity: 'elite', name: 'Electric Star', baseStyle: 'proj-standard', price: 4000, stats: { turretReloadTime: -0.05 }, blurb: 'High-voltage lime crackling energy.' },
+  { id: 'proj-void-ring', type: 'turretProjectile', rarity: 'ether', name: 'ETHER VOID HOOP', baseStyle: 'proj-standard', price: 18000, stats: { maxForwardSpeed: 0.5, acceleration: 0.2 }, blurb: 'Dark gravitational void hoop.' },
 ];

@@ -15,6 +15,7 @@ export const defaultGarageBlueprint = {
   turretId: 'pulse-crown',
   armorId: 'balanced',
   paintJobId: 'carbon-venom',
+  turretProjectileId: 'proj-standard',
   paintColor: '#101820',
   trimColor: '#d9f7ff',
   glowColor: '#82ffcf',
@@ -31,7 +32,7 @@ export const defaultGarageBlueprint = {
   turretCustomTextureData: '',
   turretCustomTextureName: '',
   turretPaintTint: 0,
-  materialStyle: 'metal',
+  materialStyle: 'matte',
   customTextureData: '',
   customTextureName: '',
 };
@@ -178,6 +179,9 @@ export const garagePartCatalog = {
     { id: 'synthwave-grid', name: 'Synthwave Grid', blurb: 'Purple gridlines over night paint.', texture: 'grid', colors: ['#160f31', '#7df9ff', '#f659ff'], stats: { maxForwardSpeed: 0.2, turretTurnRate: 0.15 } },
     { id: 'battle-scar-primer', name: 'Battle-Scar Primer', blurb: 'Primer gray with scrapes and field repairs.', texture: 'scar', colors: ['#5b6063', '#d9f7ff', '#ffcc66'], stats: { maxHealth: 5, acceleration: -0.05 } },
   ],
+  turretProjectile: [
+    { id: 'proj-standard', name: 'Standard Pulse', blurb: 'Standard kinetic energy pulse.', style: 'sphere', color: 0x82ffcf, trailColor: 0x82ffcf, stats: {} }
+  ]
 };
 
 const partGroups = Object.keys(garagePartCatalog);
@@ -271,6 +275,7 @@ export function sanitizeGarageBlueprint(value = {}) {
   clean.turretId = partById('turret', clean.turretId).id;
   clean.armorId = partById('armor', clean.armorId).id;
   clean.paintJobId = partById('paintJob', clean.paintJobId).id;
+  clean.turretProjectileId = partById('turretProjectile', clean.turretProjectileId).id;
   ['paintColor', 'trimColor', 'glowColor', 'wheelPaintColor', 'turretPaintColor'].forEach((key) => {
     clean[key] = /^#[0-9a-f]{6}$/i.test(clean[key]) ? clean[key] : defaultGarageBlueprint[key];
   });
@@ -507,6 +512,7 @@ export function getGarageSelection(blueprint) {
     turret: partById('turret', clean.turretId),
     armor: partById('armor', clean.armorId),
     paintJob: partById('paintJob', clean.paintJobId),
+    turretProjectile: partById('turretProjectile', clean.turretProjectileId),
   };
 }
 
@@ -520,6 +526,7 @@ export function buildGarageVehicleDefinition(blueprint) {
   if (progression && progression.upgrades) {
     stats.acceleration += progression.upgrades.acceleration * 0.2;
     stats.maxForwardSpeed += progression.upgrades.acceleration * 0.1;
+    stats.reverseAcceleration += (progression.upgrades.reverseAcceleration || 0) * 0.2;
     stats.steerRate += progression.upgrades.handling * 0.05;
     stats.turretMagazineSize += progression.upgrades.maxAmmo;
     stats.turretReloadTime -= progression.upgrades.firingRate * 0.02;
@@ -530,6 +537,7 @@ export function buildGarageVehicleDefinition(blueprint) {
   stats.carHalfLength = parts.chassis.dimensions.length * 0.5;
   stats.maxForwardSpeed = clamp(stats.maxForwardSpeed, 11, 26);
   stats.acceleration = clamp(stats.acceleration, 4, 11);
+  stats.reverseAcceleration = clamp(stats.reverseAcceleration, 2, 9);
   stats.steerRate = clamp(stats.steerRate, 0.48, 1.18);
   stats.steerResponse = clamp(stats.steerResponse, 6, 12);
   stats.maxHealth = Math.round(clamp(stats.maxHealth, 70, 210));

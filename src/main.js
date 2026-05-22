@@ -41,6 +41,7 @@ import { getWeaponIcon } from './ui/WeaponIcons.js';
 const canvas = document.querySelector('#game');
 const ctx = createGameContext(canvas);
 const physics = await createRapierPhysics();
+ctx.physics = physics;
 const materials = createMaterials(ctx.renderer);
 const effects = createParticleSystem(ctx.scene);
 ctx.cameraEffects = createCameraEffects();
@@ -84,6 +85,7 @@ const garageCategories = [
   { key: 'turret', field: 'turretId', label: 'Turret' },
   { key: 'armor', field: 'armorId', label: 'Armor' },
   { key: 'paintJob', field: 'paintJobId', label: 'Paint' },
+  { key: 'turretProjectile', field: 'turretProjectileId', label: 'Projectile' },
 ];
 const paintTextureFiles = {
   carbon: 'carbon.png',
@@ -805,7 +807,7 @@ function drawMapBlueprints() {
     }
     
     if (mapId === 'city') {
-      // --- Megalopolis Mayhem Blueprint ---
+      // --- Megalopolis V2 (Hyperdeck Edition) Blueprint ---
       // Outer border box
       c.strokeStyle = 'rgba(130, 255, 207, 0.35)';
       c.lineWidth = 1.5;
@@ -827,8 +829,8 @@ function drawMapBlueprints() {
       c.beginPath(); c.moveTo(w - 10, h - 10); c.lineTo(w - 10 - cornerSize, h - 10); c.moveTo(w - 10, h - 10); c.lineTo(w - 10, h - 10 - cornerSize); c.stroke();
       
       // Symmetrical Skyscraper blocks (drawn as structured grid squares)
-      c.fillStyle = 'rgba(130, 255, 207, 0.08)';
-      c.strokeStyle = 'rgba(130, 255, 207, 0.25)';
+      c.fillStyle = 'rgba(130, 255, 207, 0.06)';
+      c.strokeStyle = 'rgba(130, 255, 207, 0.2)';
       c.lineWidth = 1;
       
       // Left blocks
@@ -841,45 +843,189 @@ function drawMapBlueprints() {
       c.fillRect(w - 85, 72, 45, 35); c.strokeRect(w - 85, 72, 45, 35);
       c.fillRect(w - 85, 120, 45, 35); c.strokeRect(w - 85, 120, 45, 35);
       
-      // Center roads lanes
-      c.strokeStyle = 'rgba(130, 255, 207, 0.12)';
+      // Ground Roads (split at ramps)
+      c.strokeStyle = 'rgba(130, 255, 207, 0.15)';
+      c.lineWidth = 16; // width of road
       c.beginPath();
-      // Vertical central road
-      c.moveTo(140, 10); c.lineTo(140, h - 10);
-      // Horizontal central road
-      c.moveTo(15, 90); c.lineTo(w - 15, 90);
+      // North ground road
+      c.moveTo(140, 10); c.lineTo(140, 54);
+      // South ground road
+      c.moveTo(140, 126); c.lineTo(140, h - 10);
+      // West ground road
+      c.moveTo(15, 90); c.lineTo(87, 90);
+      // East ground road
+      c.moveTo(193, 90); c.lineTo(w - 15, 90);
+      c.stroke();
+
+      // --- HYPERDECK (2nd Floor Center Platform) ---
+      c.fillStyle = 'rgba(0, 212, 255, 0.12)';
+      c.strokeStyle = 'rgba(0, 212, 255, 0.7)';
+      c.lineWidth = 1.5;
+      c.fillRect(105, 68, 70, 44);
+      c.strokeRect(105, 68, 70, 44);
+
+      // Dash inner border for high-tech look
+      c.strokeStyle = 'rgba(0, 212, 255, 0.35)';
+      c.lineWidth = 1;
+      c.setLineDash([4, 4]);
+      c.strokeRect(107, 70, 66, 40);
+      c.setLineDash([]); // Reset dash
+
+      // Neon rails (edge barriers with gaps)
+      c.lineWidth = 2;
+      // North rails (cyan)
+      c.strokeStyle = 'rgba(0, 255, 255, 0.85)';
+      c.beginPath();
+      c.moveTo(105, 68); c.lineTo(130, 68);
+      c.moveTo(150, 68); c.lineTo(175, 68);
+      // South rails (cyan)
+      c.moveTo(105, 112); c.lineTo(130, 112);
+      c.moveTo(150, 112); c.lineTo(175, 112);
       c.stroke();
       
-      // Symmetrical launch ramps (wedges pointing inward to center 140, 90)
-      c.fillStyle = 'rgba(130, 255, 207, 0.7)';
+      // West/East rails (magenta)
+      c.strokeStyle = 'rgba(255, 0, 255, 0.85)';
+      c.beginPath();
+      // West
+      c.moveTo(105, 68); c.lineTo(105, 80);
+      c.moveTo(105, 100); c.lineTo(105, 112);
+      // East
+      c.moveTo(175, 68); c.lineTo(175, 80);
+      c.moveTo(175, 100); c.lineTo(175, 112);
+      c.stroke();
+
+      // --- 4 ACCESS RAMPS TO HYPERDECK ---
+      c.fillStyle = 'rgba(130, 255, 207, 0.25)';
       c.strokeStyle = '#82ffcf';
       c.lineWidth = 1;
-      
-      // West ramp (points East)
+
+      // North ramp (rises North to South / Downwards on canvas)
+      c.fillRect(130, 54, 20, 14);
+      c.strokeRect(130, 54, 20, 14);
+      // Chevrons pointing South (down)
+      c.strokeStyle = 'rgba(130, 255, 207, 0.7)';
+      c.lineWidth = 1.5;
       c.beginPath();
-      c.moveTo(95, 83); c.lineTo(110, 90); c.lineTo(95, 97); c.closePath();
-      c.fill(); c.stroke();
-      
-      // East ramp (points West)
+      c.moveTo(135, 58); c.lineTo(140, 62); c.lineTo(145, 58);
+      c.moveTo(135, 62); c.lineTo(140, 66); c.lineTo(145, 62);
+      c.stroke();
+
+      // South ramp (rises South to North / Upwards on canvas)
+      c.fillRect(130, 112, 20, 14);
+      c.strokeRect(130, 112, 20, 14);
+      // Chevrons pointing North (up)
       c.beginPath();
-      c.moveTo(185, 83); c.lineTo(170, 90); c.lineTo(185, 97); c.closePath();
-      c.fill(); c.stroke();
-      
-      // North ramp (points South)
+      c.moveTo(135, 122); c.lineTo(140, 118); c.lineTo(145, 122);
+      c.moveTo(135, 126); c.lineTo(140, 122); c.lineTo(145, 126);
+      c.stroke();
+
+      // West ramp (rises West to East / Rightwards on canvas)
+      c.fillRect(87, 80, 18, 20);
+      c.strokeRect(87, 80, 18, 20);
+      // Chevrons pointing East (right)
       c.beginPath();
-      c.moveTo(133, 50); c.lineTo(140, 65); c.lineTo(147, 50); c.closePath();
-      c.fill(); c.stroke();
-      
-      // South ramp (points North)
+      c.moveTo(91, 85); c.lineTo(96, 90); c.lineTo(91, 95);
+      c.moveTo(96, 85); c.lineTo(101, 90); c.lineTo(96, 95);
+      c.stroke();
+
+      // East ramp (rises East to West / Leftwards on canvas)
+      c.fillRect(175, 80, 18, 20);
+      c.strokeRect(175, 80, 18, 20);
+      // Chevrons pointing West (left)
       c.beginPath();
-      c.moveTo(133, 130); c.lineTo(140, 115); c.lineTo(147, 130); c.closePath();
-      c.fill(); c.stroke();
-      
+      c.moveTo(187, 85); c.lineTo(182, 90); c.lineTo(187, 95);
+      c.moveTo(182, 85); c.lineTo(177, 90); c.lineTo(182, 95);
+      c.stroke();
+
+      // --- CENTRAL MEGA-GENERATOR ---
+      // Generator casing
+      c.strokeStyle = 'rgba(255, 0, 183, 0.8)';
+      c.fillStyle = 'rgba(255, 0, 183, 0.15)';
+      c.lineWidth = 1;
+      c.fillRect(134, 85, 12, 10);
+      c.strokeRect(134, 85, 12, 10);
+      // Plasma Core (glowing pink dot)
+      c.fillStyle = '#ff00ff';
+      c.beginPath();
+      c.arc(140, 90, 3, 0, Math.PI * 2);
+      c.fill();
+      // Outer glow circle
+      c.strokeStyle = 'rgba(255, 0, 255, 0.4)';
+      c.beginPath();
+      c.arc(140, 90, 6, 0, Math.PI * 2);
+      c.stroke();
+
+      // --- QUANTUM CORNER TOWERS ---
+      const towers = [
+        { x: 112, y: 72 },
+        { x: 168, y: 72 },
+        { x: 112, y: 108 },
+        { x: 168, y: 108 }
+      ];
+      towers.forEach(t => {
+        // Tower base
+        c.strokeStyle = 'rgba(0, 255, 170, 0.8)';
+        c.fillStyle = 'rgba(0, 255, 170, 0.1)';
+        c.lineWidth = 1;
+        c.beginPath();
+        c.arc(t.x, t.y, 3.5, 0, Math.PI * 2);
+        c.fill(); c.stroke();
+        // Red warning beacon dot
+        c.fillStyle = '#ff3333';
+        c.beginPath();
+        c.arc(t.x, t.y, 1.2, 0, Math.PI * 2);
+        c.fill();
+      });
+
+      // --- DECK INTERACTIVE TILES & PICKUPS ---
+      // Outward turbo speed tiles (arrows pointing out from deck)
+      c.fillStyle = '#00ffff';
+      // North turbo
+      c.beginPath(); c.moveTo(140, 75); c.lineTo(137, 72); c.lineTo(143, 72); c.closePath(); c.fill();
+      // South turbo
+      c.beginPath(); c.moveTo(140, 105); c.lineTo(137, 108); c.lineTo(143, 108); c.closePath(); c.fill();
+      // West turbo
+      c.beginPath(); c.moveTo(112, 90); c.lineTo(115, 87); c.lineTo(115, 93); c.closePath(); c.fill();
+      // East turbo
+      c.beginPath(); c.moveTo(168, 90); c.lineTo(165, 87); c.lineTo(165, 93); c.closePath(); c.fill();
+
+      // Platform corners jump tiles (small orange circle with arrow/cross)
+      c.strokeStyle = '#ff6545';
+      c.lineWidth = 1;
+      const jumpTiles = [
+        { x: 122, y: 79 },
+        { x: 158, y: 79 },
+        { x: 122, y: 101 },
+        { x: 158, y: 101 }
+      ];
+      jumpTiles.forEach(jt => {
+        c.beginPath();
+        c.arc(jt.x, jt.y, 2.2, 0, Math.PI * 2);
+        c.stroke();
+      });
+
+      // Symmetrical turret and high-value pickups (tiny yellow weapon/health dots)
+      c.fillStyle = '#ffcc00';
+      const pickups = [
+        { x: 120, y: 75 }, // turret-hyper-plasma
+        { x: 160, y: 75 }, // turret-rail-slugger
+        { x: 120, y: 105 }, // turret-shock-beam
+        { x: 160, y: 105 }, // turret-magma-spitter
+      ];
+      pickups.forEach(p => {
+        c.beginPath();
+        c.arc(p.x, p.y, 1.2, 0, Math.PI * 2);
+        c.fill();
+      });
+
       // Overlay Tech Labels
       c.fillStyle = '#82ffcf';
       c.font = '700 8px monospace';
       c.fillText('GRID SIM: ACTIVE', 25, 22);
-      c.fillText('SYS: CITY_MAYHEM', 25, 32);
+      c.fillText('SYS: MEGALOPOLIS_V2', 25, 32);
+      c.fillStyle = 'rgba(0, 212, 255, 0.85)';
+      c.fillText('LVL2: HYPERDECK DEPLOYED', 25, 42);
+      c.fillStyle = '#82ffcf';
       c.fillText('SCALE: 1:2.4KM', 190, 160);
       
     } else if (mapId === 'basin') {
@@ -1159,16 +1305,26 @@ function renderTeamBuilder() {
     const isPickerActive = activeColorPickerTeamId === team.id;
     return `
     <article class="team-card ${team.id === setupPlayerTeamId ? 'selected' : ''} ${isPickerActive ? 'has-picker' : ''}" style="--team-color:${pendingTeamColors[team.id] || team.color}" data-team-id="${team.id}">
-      <button class="team-flag" type="button" data-team-flag="${team.id}" aria-label="Join ${esc(team.name)}">
-        <span>${esc(team.flagLabel)}</span>
-      </button>
-      <label>
-        <span>Team Name</span>
+      <div class="team-card-header">
+        <span class="team-faction-kicker">// SQUAD SYSTEM</span>
+        <span class="team-role-tag">${team.id === setupPlayerTeamId ? 'PLAYER CONTROLLED' : 'AI CONTROLLED'}</span>
+      </div>
+      
+      <!-- Flag / Emblem with rotating cyber graphics -->
+      <div class="team-emblem-container">
+        <div class="emblem-rotation-ring"></div>
+        <button class="team-flag" type="button" data-team-flag="${team.id}" aria-label="Join ${esc(team.name)}">
+          <span class="emblem-char">${esc(team.flagLabel)}</span>
+        </button>
+      </div>
+
+      <label class="team-input-field">
+        <span>SQUAD CODENAME</span>
         <input data-team-name="${team.id}" maxlength="16" value="${esc(team.name)}" />
       </label>
       
       <div class="team-color-section">
-        <span>Color</span>
+        <span class="sec-label">SQUAD HUE</span>
         <div class="team-color-trigger-row">
           <button type="button" class="team-color-trigger" data-team-color-trigger="${team.id}" style="--team-swatch:${pendingTeamColors[team.id] || team.color}; background-color: ${pendingTeamColors[team.id] || team.color}" aria-label="Open color picker"></button>
           <span class="team-color-hex-label">${(pendingTeamColors[team.id] || team.color).toUpperCase()}</span>
@@ -1193,12 +1349,18 @@ function renderTeamBuilder() {
       </div>
 
       <div class="team-size-stepper">
-        <span>Players</span>
-        <button type="button" data-team-dec="${team.id}">-</button>
-        <strong>${team.playerCount}</strong>
-        <button type="button" data-team-inc="${team.id}">+</button>
+        <span class="sec-label">OPERATIVES</span>
+        <div class="stepper-controls">
+          <button type="button" data-team-dec="${team.id}">-</button>
+          <strong>${team.playerCount}</strong>
+          <button type="button" data-team-inc="${team.id}">+</button>
+        </div>
       </div>
-      <p>${team.id === setupPlayerTeamId ? 'Your squad' : 'AI squad'}</p>
+      
+      <div class="team-card-footer">
+        <div class="card-status-dot"></div>
+        <span>${team.id === setupPlayerTeamId ? 'CONNECTED // PRIMARY SQUAD' : 'ACTIVE // COMBATANT'}</span>
+      </div>
     </article>
     `;
   }).join('');
@@ -1305,6 +1467,7 @@ function renderGarageStats(stats) {
   const rows = [
     ['Speed', statPercent(stats.maxForwardSpeed, 12, 24), stats.maxForwardSpeed.toFixed(1)],
     ['Launch', statPercent(stats.acceleration, 4, 10), stats.acceleration.toFixed(1)],
+    ['Reverse Accel', statPercent(stats.reverseAcceleration, 2, 9), stats.reverseAcceleration.toFixed(1)],
     ['Armor', statPercent(stats.maxHealth, 70, 180), Math.round(stats.maxHealth)],
     ['Handling', statPercent(stats.steerRate + stats.steerResponse * 0.08, 0.9, 1.95), stats.steerRate.toFixed(2)],
     ['Turret', statPercent(stats.turretTurnRate, 5, 11), stats.turretTurnRate.toFixed(1)],
@@ -1321,6 +1484,7 @@ function renderGarageStats(stats) {
 const statDeltaSpecs = [
   ['Speed', (stats) => stats.maxForwardSpeed, 1],
   ['Launch', (stats) => stats.acceleration, 1],
+  ['Reverse Accel', (stats) => stats.reverseAcceleration, 1],
   ['Armor', (stats) => stats.maxHealth, 0],
   ['Handling', (stats) => stats.steerRate + stats.steerResponse * 0.08, 2],
   ['Turret', (stats) => stats.turretTurnRate, 1],
@@ -1597,54 +1761,62 @@ function textureLabel(textureId) {
   return garagePartCatalog.paintJob.find((part) => part.texture === textureId)?.name || 'Texture';
 }
 
-function renderPartPaintControls(category) {
-  const target = partPaintTargets[category.key];
+function renderPartPaintControlsFor(targetKey) {
+  const target = partPaintTargets[targetKey];
   if (!target) return '';
   const color = garageBlueprint[target.colorKey];
   const textureId = garageBlueprint[target.textureKey];
   const customName = garageBlueprint[target.customNameKey];
   const hasImport = Boolean(garageBlueprint[target.customDataKey]);
   const textureOptions = [
-    { id: '', name: 'Solid Color', blurb: 'Clean uninterrupted paint.', colors: [color, color, color] },
+    { id: '', name: 'Solid', blurb: 'Clean color.', colors: [color, color, color] },
     ...garagePartCatalog.paintJob.map((part) => ({ id: part.texture, name: part.name, blurb: part.blurb, colors: part.colors })),
   ];
 
   return `
-    <section class="part-paint-panel" data-part-paint-panel="${category.key}">
-      <header>
-        <span>${target.title}</span>
-        <b>${hasImport ? esc(customName || 'Imported texture') : esc(textureLabel(textureId))}</b>
+    <div class="garage-part-customizer-box" data-part-paint-panel="${targetKey}">
+      <header class="sidebar-sub-section-header">
+        <span class="header-title">${target.title.toUpperCase()}</span>
+        <span class="header-status">${hasImport ? esc(customName || 'Imported') : esc(textureLabel(textureId))}</span>
       </header>
-      <div class="garage-color-grid part-paint-color-grid">
-        ${renderColorControl(target.colorKey, target.title, target.tintKey, 'Texture Tint')}
+      
+      <!-- Compact Presets Grid -->
+      <div class="sidebar-texture-presets-wrap">
+        <span class="presets-label">Presets</span>
+        <div class="part-texture-grid compact-grid">
+          ${textureOptions.map((part) => {
+            const colors = part.colors || [color, color, color];
+            const textureUrl = paintTextureUrl(part.id);
+            const selected = !hasImport && textureId === part.id;
+            const previewStyle = [
+              `--paint-a:${colors[0]}`,
+              `--paint-b:${colors[1]}`,
+              `--paint-c:${colors[2]}`,
+              textureUrl ? `--paint-preview:url('${textureUrl}')` : '',
+            ].filter(Boolean).join(';');
+            return `
+              <button type="button" class="part-texture-card compact-card ${selected ? 'selected' : ''}" data-garage-part-texture-target="${targetKey}" data-garage-part-texture="${esc(part.id)}" style="${previewStyle}" title="${esc(part.name)} - ${esc(part.blurb)}">
+                <span class="paint-preview"></span>
+              </button>
+            `;
+          }).join('')}
+        </div>
       </div>
-      <div class="part-texture-grid">
-        ${textureOptions.map((part) => {
-          const colors = part.colors || [color, color, color];
-          const textureUrl = paintTextureUrl(part.id);
-          const selected = !hasImport && textureId === part.id;
-          const previewStyle = [
-            `--paint-a:${colors[0]}`,
-            `--paint-b:${colors[1]}`,
-            `--paint-c:${colors[2]}`,
-            textureUrl ? `--paint-preview:url('${textureUrl}')` : '',
-          ].filter(Boolean).join(';');
-          return `
-            <button type="button" class="part-texture-card ${selected ? 'selected' : ''}" data-garage-part-texture-target="${category.key}" data-garage-part-texture="${esc(part.id)}" style="${previewStyle}">
-              <span class="paint-preview"></span>
-              <strong>${esc(part.name)}</strong>
-            </button>
-          `;
-        }).join('')}
+
+      <!-- Color picker & Tint range -->
+      <div class="sidebar-color-control-wrap">
+        ${renderColorControl(target.colorKey, 'Paint Color', target.tintKey, 'Texture Tint')}
       </div>
-      <div class="garage-import-actions">
-        <label class="garage-import-button">
-          <input type="file" data-garage-texture-import="${category.key}" accept="image/*" />
-          <span>Import Texture</span>
+
+      <!-- Import custom texture file -->
+      <div class="sidebar-import-wrap">
+        <label class="cyber-import-button">
+          <input type="file" data-garage-texture-import="${targetKey}" accept="image/*" />
+          <span>Import Custom Texture</span>
         </label>
-        <button type="button" data-garage-clear-texture="${category.key}" ${hasImport ? '' : 'disabled'}>Clear Import</button>
+        <button type="button" class="cyber-clear-button" data-garage-clear-texture="${targetKey}" ${hasImport ? '' : 'disabled'}>Clear</button>
       </div>
-    </section>
+    </div>
   `;
 }
 
@@ -1785,48 +1957,78 @@ function renderGarageBuilder() {
   const currentCategory = garageCategories.find((item) => item.key === activeGarageCategory) || garageCategories[0];
   const editingTemplate = getEditingTemplate();
   if (ui.garageTitle) ui.garageTitle.textContent = editingTemplate ? `${editingTemplate.name}${garageBuildDirty ? ' *' : ''}` : def.name;
+  
+  // 1. Render Left Column: Category Tabs and Part Catalog selection grid
   ui.garageControls.innerHTML = `
     <div class="garage-tabs">
       ${garageCategories.map((cat) => `<button type="button" class="${cat.key === currentCategory.key ? 'selected' : ''}" data-garage-category="${cat.key}">${cat.label}</button>`).join('')}
     </div>
-    ${renderGaragePartCards(currentCategory)}
-    ${renderPartPaintControls(currentCategory)}
-    <div class="garage-color-grid">
-      ${renderColorControl('paintColor', 'Paint', 'paintTint', 'Texture Tint')}
-      ${renderColorControl('trimColor', 'Trim', 'trimIntensity', 'Trim Intensity')}
-      ${renderColorControl('glowColor', 'Glow', 'glowIntensity', 'Glow Intensity')}
+    <div class="garage-part-grid-wrapper">
+      ${renderGaragePartCards(currentCategory)}
     </div>
-    <div class="garage-appearance-panel">
-      <section class="garage-material-picker">
-        <header>
-          <span>Material</span>
-          <b>${esc(garageMaterialStyles.find((style) => style.id === garageBlueprint.materialStyle)?.name || 'Metal')}</b>
+  `;
+
+  // 2. Render Right Column: Persistent appearance & customizer sidebar
+  if (ui.garageAppearancePanel) {
+    ui.garageAppearancePanel.innerHTML = `
+      <!-- Material Style Selection Group -->
+      <div class="garage-part-customizer-box">
+        <header class="sidebar-sub-section-header">
+          <span class="header-title">MATERIAL STYLE</span>
+          <span class="header-status highlight">${esc(garageMaterialStyles.find((style) => style.id === garageBlueprint.materialStyle)?.name || 'Non-shiny')}</span>
         </header>
-        <div class="garage-material-options">
+        <div class="garage-material-options-large">
           ${garageMaterialStyles.map((style) => `
-            <button type="button" class="${style.id === garageBlueprint.materialStyle ? 'selected' : ''}" data-garage-material="${style.id}">
-              <strong>${esc(style.name)}</strong>
-              <span>${esc(style.blurb)}</span>
+            <button type="button" class="material-btn-large ${style.id === garageBlueprint.materialStyle ? 'selected' : ''}" data-garage-material="${style.id}">
+              <div class="material-btn-indicator"></div>
+              <div class="material-btn-label">
+                <strong>${esc(style.name)}</strong>
+                <span>${esc(style.blurb)}</span>
+              </div>
             </button>
           `).join('')}
         </div>
-      </section>
-      <section class="garage-texture-import">
-        <header>
-          <span>Texture Source</span>
-          <b>${garageBlueprint.customTextureData ? esc(garageBlueprint.customTextureName || 'Imported texture') : esc(def.paintJob.name)}</b>
+      </div>
+
+      <!-- Vehicle Body Paint Group -->
+      <div class="garage-part-customizer-box">
+        <header class="sidebar-sub-section-header">
+          <span class="header-title">VEHICLE BODY PAINT</span>
+          <span class="header-status">${esc(def.paintJob.name)}</span>
         </header>
-        <div class="garage-import-actions">
-          <label class="garage-import-button">
-            <input type="file" data-garage-texture-import="body" accept="image/*" />
-            <span>Import Texture</span>
-          </label>
-          <button type="button" data-garage-clear-texture="body" ${garageBlueprint.customTextureData ? '' : 'disabled'}>Use Paint Texture</button>
+        <div class="sidebar-color-control-wrap">
+          ${renderColorControl('paintColor', 'Body Paint', 'paintTint', 'Texture Tint')}
+          ${renderColorControl('trimColor', 'Trim Accent', 'trimIntensity', 'Trim Intensity')}
+          ${renderColorControl('glowColor', 'Tech Glow', 'glowIntensity', 'Glow Intensity')}
         </div>
-      </section>
-    </div>
-  `;
+      </div>
+
+      <!-- Custom Body Texture Import Group -->
+      <div class="garage-part-customizer-box">
+        <header class="sidebar-sub-section-header">
+          <span class="header-title">BODY CUSTOM TEXTURE</span>
+          <span class="header-status">${garageBlueprint.customTextureData ? esc(garageBlueprint.customTextureName || 'Imported texture') : 'Preset default'}</span>
+        </header>
+        <div class="sidebar-import-wrap">
+          <label class="cyber-import-button">
+            <input type="file" data-garage-texture-import="body" accept="image/*" />
+            <span>Import Custom Texture</span>
+          </label>
+          <button type="button" class="cyber-clear-button" data-garage-clear-texture="body" ${garageBlueprint.customTextureData ? '' : 'disabled'}>Use Preset Paint</button>
+        </div>
+      </div>
+
+      <!-- Persistent Wheels Design Group -->
+      ${renderPartPaintControlsFor('wheel')}
+
+      <!-- Persistent Turret Design Group -->
+      ${renderPartPaintControlsFor('turret')}
+    `;
+  }
+
+  // 3. Render Vehicle Performance Stats Panel (Right Column - Bottom)
   ui.garageStats.innerHTML = renderGarageStats(getGarageStats(garageBlueprint));
+
   saveGarageBlueprint(garageBlueprint);
   rebuildGaragePreview();
   updatePartSnapshots(currentCategory);
@@ -1847,6 +2049,86 @@ function readMatchOptions() {
   };
 }
 
+function syncProfileHUD() {
+  const progression = loadProgression();
+  const expReq = getExpRequirement(progression.level);
+  const pct = Math.min(100, (progression.exp / expReq) * 100);
+  
+  if (ui.hudProfileLevel) ui.hudProfileLevel.textContent = progression.level;
+  if (ui.hudProfileExpFill) ui.hudProfileExpFill.style.width = `${pct}%`;
+  if (ui.hudProfileExpText) ui.hudProfileExpText.textContent = `${progression.exp} / ${expReq} EXP`;
+  if (ui.hudProfileGoldText) ui.hudProfileGoldText.textContent = progression.gold;
+  
+  if (ui.hudProfilePts) ui.hudProfilePts.textContent = progression.statPoints;
+  if (ui.hudProfilePtsWrapper) {
+    ui.hudProfilePtsWrapper.classList.toggle('hidden', activeSetupStep !== 'shop' && progression.statPoints === 0);
+  }
+}
+
+function updateUnifiedLayout(step) {
+  // Update active breadcrumbs
+  document.querySelectorAll('.breadcrumb-step').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.stepTarget === step);
+  });
+  
+  // Update header text based on step
+  const titleEl = document.getElementById('unifiedHeaderTitle');
+  const kickerEl = document.querySelector('.cyber-brand-kicker');
+  if (titleEl) {
+    if (step === 'team') {
+      titleEl.textContent = 'TEAM MAYHEM SETUP';
+      if (kickerEl) kickerEl.textContent = '// SYSTEM: TACTICAL MATCH SETUP';
+    } else if (step === 'vehicle') {
+      const editingTemplate = getEditingTemplate(); // check template if editing
+      titleEl.textContent = 'CUSTOM GARAGE';
+      if (kickerEl) kickerEl.textContent = '// GARAGE: TUNE VEHICLE SYSTEMS';
+    } else if (step === 'game') {
+      titleEl.textContent = 'GAME RULES';
+      if (kickerEl) kickerEl.textContent = '// OPERATION: ENGAGEMENT PARAMETERS';
+    } else if (step === 'shop') {
+      titleEl.textContent = 'BLACK MARKET';
+      if (kickerEl) kickerEl.textContent = '// BLACK MARKET: PROCUREMENT & UPGRADES';
+    }
+  }
+  
+  // Toggle footer utility panels
+  const teamUtil = document.getElementById('footerUtilityTeam');
+  const vehicleUtil = document.getElementById('footerUtilityVehicle');
+  const gameUtil = document.getElementById('footerUtilityGame');
+  const shopUtil = document.getElementById('footerUtilityShop');
+  
+  if (teamUtil) teamUtil.classList.toggle('active', step === 'team');
+  if (vehicleUtil) vehicleUtil.classList.toggle('active', step === 'vehicle');
+  if (gameUtil) gameUtil.classList.toggle('active', step === 'game');
+  if (shopUtil) shopUtil.classList.toggle('active', step === 'shop');
+  
+  // Update unified buttons labels
+  if (ui.unifiedContinueButton) {
+    if (step === 'team') {
+      ui.unifiedContinueButton.style.display = '';
+      ui.unifiedContinueButton.innerHTML = `<span class="btn-text">CONTINUE TO GARAGE</span><span class="btn-arrow">→</span>`;
+    } else if (step === 'vehicle') {
+      ui.unifiedContinueButton.style.display = '';
+      ui.unifiedContinueButton.innerHTML = `<span class="btn-text">CONTINUE TO GAME SETUP</span><span class="btn-arrow">→</span>`;
+    } else if (step === 'game') {
+      ui.unifiedContinueButton.style.display = '';
+      ui.unifiedContinueButton.innerHTML = `<span class="btn-text">START MATCH</span><span class="btn-arrow">⚡</span>`;
+    } else if (step === 'shop') {
+      ui.unifiedContinueButton.style.display = 'none';
+    }
+  }
+  
+  // Update back button kicker text
+  const backBtnText = ui.unifiedBackButton?.querySelector('.btn-text');
+  if (backBtnText) {
+    if (step === 'team') {
+      backBtnText.textContent = 'MAIN MENU';
+    } else {
+      backBtnText.textContent = 'BACK';
+    }
+  }
+}
+
 function renderSetupStep(step = activeSetupStep) {
   activeSetupStep = step;
   ui.teamSetupStep?.classList.toggle('active', step === 'team');
@@ -1856,6 +2138,9 @@ function renderSetupStep(step = activeSetupStep) {
   ui.matchMenu?.classList.toggle('vehicle-mode', step === 'vehicle');
   ui.matchMenu?.classList.toggle('game-mode', step === 'game');
   ui.matchMenu?.classList.toggle('shop-mode', step === 'shop');
+
+  updateUnifiedLayout(step);
+  syncProfileHUD();
 
   if (step === 'game') {
     // Sync kill limit button highlights
@@ -1906,13 +2191,13 @@ const quickTips = [
   { id: 'builds-edit', context: ['builds'], target: '[data-template-edit]', title: 'Edit Saved Builds', body: 'Edit loads that saved build into the garage. Your slot is not overwritten until you press Save Changes.' },
   { id: 'builds-save-changes', context: ['vehicle'], target: '#saveEditedBuildButton', title: 'Save Changes', body: 'After editing a saved build, this button updates the same slot while keeping its history stats.' },
   { id: 'builds-save-variant', context: ['vehicle'], target: '#saveBuildVariantButton', title: 'Save As New', body: 'Use Save As New when you want a speed, armor, or paint variant without replacing the original.' },
-  { id: 'match-exp', context: ['game', 'results', 'play'], target: '#startMatchButton, #resultsRewards, #quickTipsToggle', title: 'Match EXP', body: 'Every match pays lifetime EXP, so experimenting still moves your profile forward.' },
-  { id: 'match-gold', context: ['shop', 'results', 'play'], target: '#shopStatsHeader, #resultsRewards, #quickTipsToggle', title: 'Gold Rewards', body: 'Gold comes from match rewards and combat performance, then funds premium parts and upgrades.' },
+  { id: 'match-exp', context: ['game', 'results', 'play'], target: '#unifiedContinueButton, #resultsRewards, #quickTipsToggle', title: 'Match EXP', body: 'Every match pays lifetime EXP, so experimenting still moves your profile forward.' },
+  { id: 'match-gold', context: ['shop', 'results', 'play'], target: '.profile-telemetry, #resultsRewards, #quickTipsToggle', title: 'Gold Rewards', body: 'Gold comes from match rewards and combat performance, then funds premium parts and upgrades.' },
   { id: 'turret-hit-rewards', context: ['play', 'results'], target: '#weaponPanel, #resultsRewards', title: 'Hit Rewards', body: 'Turret hits and weapon hits add extra reward lines. Accurate pressure pays even before a kill.' },
   { id: 'kill-rewards', context: ['play', 'results'], target: '#killFeed, #resultsRewards', title: 'Kill Rewards', body: 'Kills add bonus EXP and Gold, but assists through damage still help your match total.' },
   { id: 'lifetime-achievements', context: ['main', 'results'], target: '#navAchievementsButton, #resultsBody', title: 'Lifetime Stats', body: 'Lifetime Achievements track wins, damage, kills, EXP, and Gold across all plays.' },
-  { id: 'premium-shop', context: ['team', 'shop', 'main'], target: '#openShopFromMenuButton, #navPremiumShopButton', title: 'Spend Gold', body: 'The shop converts earned Gold into premium parts and stat upgrades for future builds.' },
-  { id: 'level-stat-points', context: ['shop', 'results'], target: '#shopStatsHeader, #resultsRewards', title: 'Level Ups', body: 'Leveling up grants stat points. Spend them on upgrades that fit how you drive and fight.' },
+  { id: 'premium-shop', context: ['team', 'shop', 'main'], target: '#unifiedShopButton, #navPremiumShopButton', title: 'Spend Gold', body: 'The shop converts earned Gold into premium parts and stat upgrades for future builds.' },
+  { id: 'level-stat-points', context: ['shop', 'results'], target: '.profile-telemetry, #resultsRewards', title: 'Level Ups', body: 'Leveling up grants stat points. Spend them on upgrades that fit how you drive and fight.' },
   { id: 'handling-upgrade', context: ['shop'], target: '[data-upgrade-stat=\"handling\"]', title: 'Handling Upgrade', body: 'Handling upgrades make fast builds easier to correct after slides, impacts, and hard turns.' },
   { id: 'firing-upgrade', context: ['shop'], target: '[data-upgrade-stat=\"firingRate\"]', title: 'Firing Rate', body: 'Firing Rate upgrades reduce turret downtime, which helps veteran players keep pressure on targets.' },
   { id: 'ammo-upgrade', context: ['shop'], target: '[data-upgrade-stat=\"maxAmmo\"]', title: 'Max Ammo', body: 'Max Ammo upgrades support longer fights and make missed shots less punishing.' },
@@ -3043,14 +3328,63 @@ async function beginMatch() {
   }
 }
 
-ui.startMatchButton.addEventListener('click', beginMatch);
-document.getElementById('backToMainMenuFromSetupButton')?.addEventListener('click', () => {
-  openMainMenu();
+// Unified Navigation Event Listeners
+ui.unifiedContinueButton?.addEventListener('click', () => {
+  if (activeSetupStep === 'team') {
+    renderSetupStep('vehicle');
+  } else if (activeSetupStep === 'vehicle') {
+    renderSetupStep('game');
+  } else if (activeSetupStep === 'game') {
+    beginMatch();
+  }
 });
-ui.continueToGarageButton?.addEventListener('click', () => renderSetupStep('vehicle'));
-ui.backToTeamButton?.addEventListener('click', () => renderSetupStep('team'));
-ui.continueToGameButton?.addEventListener('click', () => renderSetupStep('game'));
-ui.backToGarageButton?.addEventListener('click', () => renderSetupStep('vehicle'));
+
+ui.unifiedBackButton?.addEventListener('click', () => {
+  if (activeSetupStep === 'shop') {
+    if (shopOrigin === 'pause') {
+      ui.matchMenu.classList.add('hidden');
+      ctx.match.paused = false;
+    } else if (shopOrigin === 'main') {
+      openMainMenu();
+    } else {
+      renderSetupStep(shopOrigin);
+    }
+  } else if (activeSetupStep === 'team') {
+    openMainMenu();
+  } else if (activeSetupStep === 'vehicle') {
+    renderSetupStep('team');
+  } else if (activeSetupStep === 'game') {
+    renderSetupStep('vehicle');
+  }
+});
+
+// Breadcrumbs Step Click Listeners
+document.querySelectorAll('.breadcrumb-step').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const target = btn.dataset.stepTarget;
+    if (target) {
+      if (activeSetupStep === 'shop') {
+        shopOrigin = target;
+      }
+      renderSetupStep(target);
+    }
+  });
+});
+
+// Unified Shop Button Click Listener
+ui.unifiedShopButton?.addEventListener('click', () => {
+  if (activeSetupStep !== 'shop') {
+    shopOrigin = activeSetupStep;
+    renderSetupStep('shop');
+    renderShop();
+  } else {
+    if (shopOrigin === 'main') {
+      openMainMenu();
+    } else {
+      renderSetupStep(shopOrigin);
+    }
+  }
+});
 
 function closeMatchResults() {
   cleanupMVPPortrait();
@@ -3084,6 +3418,7 @@ let activeShopTab = 'upgrades';
 
 function renderShop() {
   const progression = loadProgression();
+  syncProfileHUD();
   const header = document.getElementById('shopStatsHeader');
   if (header) {
     const expReq = getExpRequirement(progression.level);
@@ -3120,6 +3455,7 @@ function renderShop() {
     grid.innerHTML = `
       ${renderUpgrade('handling', 'Handling', UPGRADE_MAX_LEVELS.handling)}
       ${renderUpgrade('acceleration', 'Acceleration', UPGRADE_MAX_LEVELS.acceleration)}
+      ${renderUpgrade('reverseAcceleration', 'Reverse Accel', UPGRADE_MAX_LEVELS.reverseAcceleration)}
       ${renderUpgrade('maxAmmo', 'Max Ammo', UPGRADE_MAX_LEVELS.maxAmmo)}
       ${renderUpgrade('firingRate', 'Firing Rate', UPGRADE_MAX_LEVELS.firingRate)}
     `;
@@ -3183,30 +3519,12 @@ document.getElementById('shopGrid')?.addEventListener('click', e => {
 
 let shopOrigin = 'team';
 
-document.getElementById('openShopFromMenuButton')?.addEventListener('click', () => {
-  shopOrigin = 'team';
-  renderSetupStep('shop');
-  renderShop();
-});
-
 document.getElementById('openShopFromPauseButton')?.addEventListener('click', () => {
   shopOrigin = 'pause';
   ui.pauseMenu.classList.add('hidden');
   ui.matchMenu.classList.remove('hidden');
   renderSetupStep('shop');
   renderShop();
-});
-
-document.getElementById('backFromShopButton')?.addEventListener('click', () => {
-  if (shopOrigin === 'pause') {
-    ui.matchMenu.classList.add('hidden');
-    ui.pauseMenu.classList.remove('hidden');
-  } else if (shopOrigin === 'main') {
-    openMainMenu();
-  } else {
-    renderSetupStep('team');
-  }
-  shopOrigin = 'team';
 });
 
 // Game Setup — Kill limit buttons
@@ -3397,7 +3715,7 @@ ui.teamBuilder.addEventListener('input', (event) => {
 ui.teamBuilder.addEventListener('change', (event) => {
   if (event.target.dataset.teamName) renderTeamBuilder();
 });
-ui.garageControls.addEventListener('click', (event) => {
+ui.garagePanel.addEventListener('click', (event) => {
   const categoryButton = event.target.closest('[data-garage-category]');
   const partButton = event.target.closest('[data-garage-part]');
   const materialButton = event.target.closest('[data-garage-material]');
@@ -3457,7 +3775,7 @@ ui.garageControls.addEventListener('click', (event) => {
     if (categoryButton) ui.garageControls.scrollTop = 0;
   }
 });
-ui.garageControls.addEventListener('input', (event) => {
+ui.garagePanel.addEventListener('input', (event) => {
   const colorKey = event.target.dataset.garageColor;
   const hexKey = event.target.dataset.garageColorHex;
   const sliderKey = event.target.dataset.garageSlider;
@@ -3475,7 +3793,7 @@ ui.garageControls.addEventListener('input', (event) => {
     renderGarageBuilder();
   }
 });
-ui.garageControls.addEventListener('change', async (event) => {
+ui.garagePanel.addEventListener('change', async (event) => {
   const hexKey = event.target.dataset.garageColorHex;
   if (hexKey) {
     if (/^#[0-9a-f]{6}$/i.test(event.target.value)) garageBlueprint[hexKey] = event.target.value;
@@ -3537,7 +3855,7 @@ setupInput(ctx, {
               ui.matchMenu.classList.add('hidden');
               ctx.match.paused = false;
             } else {
-              renderSetupStep('team');
+              renderSetupStep(shopOrigin);
             }
             canvas.focus();
           } else {
@@ -3552,11 +3870,15 @@ setupInput(ctx, {
         } else if (!ctx.match.active) {
           const shopActive = !ui.matchMenu.classList.contains('hidden') && document.getElementById('shopMenuStep')?.classList.contains('active');
           if (shopActive) {
-            console.log("[Input DEBUG] Menu Shop active, returning to team setup");
-            renderSetupStep('team');
+            console.log("[Input DEBUG] Menu Shop active, returning to origin:", shopOrigin);
+            if (shopOrigin === 'main') {
+              openMainMenu();
+            } else {
+              renderSetupStep(shopOrigin);
+            }
           } else {
-            console.log("[Input DEBUG] Menu Shop opening");
-            shopOrigin = 'team';
+            console.log("[Input DEBUG] Menu Shop opening from step:", activeSetupStep);
+            shopOrigin = activeSetupStep;
             renderSetupStep('shop');
             renderShop();
           }

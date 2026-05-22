@@ -47,9 +47,14 @@ export const mapRegistry = {
       ctx.scene.add(ground);
       ctx.aimMeshes = [ground];
 
-      // Surrounding loop-highways and cross lanes
-      addRoad(ctx, materials, 0, 0, 30, size - 100);
-      addRoad(ctx, materials, 0, 0, size - 100, 30);
+      // Surrounding loop-highways (outer) and split center-lanes
+      // We split the center cross lanes so they end where the ramps start (at +-90)
+      addRoad(ctx, materials, 0, -140, 30, 100); // North ground road
+      addRoad(ctx, materials, 0, 140, 30, 100);  // South ground road
+      addRoad(ctx, materials, -140, 0, 100, 30); // West ground road
+      addRoad(ctx, materials, 140, 0, 100, 30);  // East ground road
+
+      // Outer loop highways and bypass roads (from original map)
       addRoad(ctx, materials, -size * 0.25, -size * 0.25, 26, size * 0.45);
       addRoad(ctx, materials, size * 0.25, size * 0.25, 26, size * 0.45);
       addRoad(ctx, materials, -size * 0.2, size * 0.25, size * 0.45, 24);
@@ -64,7 +69,7 @@ export const mapRegistry = {
       addTrafficArch(ctx, -120, 0, Math.PI * 0.5, materials);
       addTrafficArch(ctx, 120, 0, Math.PI * 0.5, materials);
 
-      // Skyscraper block clusters
+      // Skyscraper block clusters (from original map)
       const bMats = [materials.brick, materials.concrete, materials.windows];
       const skyscraperBlocks = [
         [-80, -80, 35, 24, 35, bMats[0]],
@@ -82,36 +87,190 @@ export const mapRegistry = {
       ];
       skyscraperBlocks.forEach((b) => addBuilding(ctx, materials, ...b));
 
-      // Add blinking red warning beacon lights on skyscraper roofs
+      // Skyscraper Roof Beacons
       skyscraperBlocks.forEach((b) => {
         const bx = b[0];
         const bz = b[1];
         const bh = b[3];
-        
         const beaconGroup = new THREE.Group();
         beaconGroup.position.set(bx, bh + 0.22, bz);
-        
         const beaconMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
         const beaconMesh = new THREE.Mesh(new THREE.SphereGeometry(0.32, 8, 8), beaconMat);
         beaconGroup.add(beaconMesh);
-        
         const beaconLight = new THREE.PointLight(0xff0000, 2.5, 12, 1.8);
         beaconLight.castShadow = false;
         beaconGroup.add(beaconLight);
-        
         ctx.scene.add(beaconGroup);
-        
         if (!ctx.beacons) ctx.beacons = [];
         ctx.beacons.push({ mesh: beaconMesh, light: beaconLight, timer: Math.random() * Math.PI });
       });
 
-      // Symmetrical Launch Ramps (4 Ramps pointing to center crossroad)
-      addRamp(ctx, materials, -55, 0, 14, 25, Math.PI * 0.5, 0.1, 7.5); // points East (into center)
-      addRamp(ctx, materials, 55, 0, 14, 25, -Math.PI * 0.5, 0.1, 7.5); // points West (into center)
-      addRamp(ctx, materials, 0, -55, 14, 25, 0, 0.1, 7.5); // points South (into center)
-      addRamp(ctx, materials, 0, 55, 14, 25, Math.PI, 0.1, 7.5); // points North (into center)
+      // --- HYPERDECK (2ND FLOOR CENTER PLATFORM) ---
+      const deckMesh = new THREE.Mesh(new THREE.BoxGeometry(120, 8, 120), materials.hyperdeck);
+      deckMesh.position.set(0, 4, 0);
+      deckMesh.castShadow = true;
+      deckMesh.receiveShadow = true;
+      ctx.scene.add(deckMesh);
+      ctx.aimMeshes.push(deckMesh);
 
-      // Obstacles
+      // Register platform physical collision shape & drivable area
+      register(ctx, 'building', 0, 0, 120, 120, 0, 0.35, 8.0);
+      ctx.ramps.push({ x: 0, z: 0, w: 120, d: 120, yaw: 0, hStart: 8.0, hEnd: 8.0 });
+
+      // Neon materials
+      const cyanNeonMat = new THREE.MeshStandardMaterial({
+        color: 0x00ffff,
+        emissive: 0x00ffff,
+        emissiveIntensity: 3.5,
+        roughness: 0.1
+      });
+      const magentaNeonMat = new THREE.MeshStandardMaterial({
+        color: 0xff00ff,
+        emissive: 0xff00ff,
+        emissiveIntensity: 3.5,
+        roughness: 0.1
+      });
+
+      // Add edge neon guardrails (with gaps for the ramps at X/Z = 0)
+      const addNeonRail = (x, z, w, h, d, mat) => {
+        const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+        mesh.position.set(x, 8.0 + h / 2, z);
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
+        ctx.scene.add(mesh);
+        register(ctx, 'building', x, z, w, d, 0, 0.2, 16.0); // High height so it's solid on deck
+      };
+
+      // North edge rails (z = -60, gap at x in [-18, 18])
+      addNeonRail(-39, -60, 42, 1.2, 0.8, cyanNeonMat);
+      addNeonRail(39, -60, 42, 1.2, 0.8, cyanNeonMat);
+      // South edge rails (z = 60, gap at x in [-18, 18])
+      addNeonRail(-39, 60, 42, 1.2, 0.8, cyanNeonMat);
+      addNeonRail(39, 60, 42, 1.2, 0.8, cyanNeonMat);
+      // West edge rails (x = -60, gap at z in [-18, 18])
+      addNeonRail(-60, -39, 0.8, 1.2, 42, magentaNeonMat);
+      addNeonRail(-60, 39, 0.8, 1.2, 42, magentaNeonMat);
+      // East edge rails (x = 60, gap at z in [-18, 18])
+      addNeonRail(60, -39, 0.8, 1.2, 42, magentaNeonMat);
+      addNeonRail(60, 39, 0.8, 1.2, 42, magentaNeonMat);
+
+      // --- 4 ACCESS RAMPS TO HYPERDECK ---
+      addRamp(ctx, materials, 0, -75, 36, 30, 0, 0.02, 8.0); // North ramp (rises North to South)
+      addRoad(ctx, materials, 0, -75, 30, 30, 4.0); // Road on North ramp
+      
+      addRamp(ctx, materials, 0, 75, 36, 30, Math.PI, 0.02, 8.0); // South ramp (rises South to North)
+      addRoad(ctx, materials, 0, 75, 30, 30, 4.0); // Road on South ramp
+
+      addRamp(ctx, materials, -75, 0, 36, 30, Math.PI * 0.5, 0.02, 8.0); // West ramp (rises West to East)
+      addRoad(ctx, materials, -75, 0, 30, 30, 4.0); // Road on West ramp
+
+      addRamp(ctx, materials, 75, 0, 36, 30, -Math.PI * 0.5, 0.02, 8.0); // East ramp (rises East to West)
+      addRoad(ctx, materials, 75, 0, 30, 30, 4.0); // Road on East ramp
+
+      // --- HYPERDECK ROADS & NAVIGATION GRAPH PATHS ---
+      // Grid loop on deck (around the generator)
+      addRoad(ctx, materials, -30, 0, 20, 80, 8.02); // West side loop
+      addRoad(ctx, materials, 30, 0, 20, 80, 8.02);  // East side loop
+      addRoad(ctx, materials, 0, -30, 80, 20, 8.02); // North side loop
+      addRoad(ctx, materials, 0, 30, 80, 20, 8.02);  // South side loop
+
+      // Connectors from platform edges to the loop
+      addRoad(ctx, materials, 0, -45, 30, 30, 8.02); // North entry connector
+      addRoad(ctx, materials, 0, 45, 30, 30, 8.02);  // South entry connector
+      addRoad(ctx, materials, -45, 0, 30, 30, 8.02); // West entry connector
+      addRoad(ctx, materials, 45, 0, 30, 30, 8.02);  // East entry connector
+
+      // --- QUANTUM TOWERS (CORNER OBSTACLES) ---
+      const towerPositions = [
+        { x: -48, z: -48 },
+        { x: 48, z: -48 },
+        { x: -48, z: 48 },
+        { x: 48, z: 48 }
+      ];
+      towerPositions.forEach((pos, idx) => {
+        // Base tower structure (tapered cylinder of height 16)
+        const towerMesh = new THREE.Mesh(new THREE.CylinderGeometry(2.0, 2.6, 16.0, 16), materials.tower);
+        towerMesh.position.set(pos.x, 8.0 + 8.0, pos.z);
+        towerMesh.castShadow = true;
+        towerMesh.receiveShadow = true;
+        ctx.scene.add(towerMesh);
+
+        // Glowing cyan accent rings
+        const ringGeom = new THREE.TorusGeometry(2.4, 0.16, 8, 24);
+        const ring1 = new THREE.Mesh(ringGeom, cyanNeonMat);
+        ring1.position.set(pos.x, 12.0, pos.z);
+        ring1.rotation.x = Math.PI * 0.5;
+        ctx.scene.add(ring1);
+        const ring2 = new THREE.Mesh(ringGeom, cyanNeonMat);
+        ring2.position.set(pos.x, 18.0, pos.z);
+        ring2.rotation.x = Math.PI * 0.5;
+        ctx.scene.add(ring2);
+
+        // Aviation Warning Beacon on top
+        const beaconMat = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+        const beaconMesh = new THREE.Mesh(new THREE.SphereGeometry(0.5, 8, 8), beaconMat);
+        beaconMesh.position.set(pos.x, 24.5, pos.z);
+        ctx.scene.add(beaconMesh);
+        const beaconLight = new THREE.PointLight(0xff0000, 3.0, 14, 1.8);
+        beaconLight.position.set(pos.x, 24.5, pos.z);
+        beaconLight.castShadow = false;
+        ctx.scene.add(beaconLight);
+
+        // Push warning beacon to automatic flashing loop
+        ctx.beacons.push({ mesh: beaconMesh, light: beaconLight, timer: Math.random() * Math.PI });
+
+        // Physical collision
+        register(ctx, 'building', pos.x, pos.z, 6.0, 6.0, 0, 0.3, 24.0);
+      });
+
+      // --- CENTRAL MEGA-GENERATOR ---
+      const generatorGroup = new THREE.Group();
+      generatorGroup.position.set(0, 8.0, 0); // Ground sits on top of Hyperdeck
+
+      // Base reactor casing
+      const baseMesh = new THREE.Mesh(new THREE.BoxGeometry(22, 4, 22), materials.generator);
+      baseMesh.position.set(0, 2, 0);
+      baseMesh.castShadow = true;
+      baseMesh.receiveShadow = true;
+      generatorGroup.add(baseMesh);
+
+      // Plasma Core Sphere
+      const plasmaCoreMat = new THREE.MeshStandardMaterial({
+        color: 0xff00ff,
+        emissive: 0xff00ff,
+        emissiveIntensity: 4.8,
+        roughness: 0.1,
+        metalness: 0.2
+      });
+      const coreMesh = new THREE.Mesh(new THREE.SphereGeometry(5.0, 32, 32), plasmaCoreMat);
+      coreMesh.position.set(0, 9.0, 0);
+      generatorGroup.add(coreMesh);
+
+      // Emissive core point light
+      const coreLight = new THREE.PointLight(0xff00ff, 6.0, 42, 1.5);
+      coreLight.position.set(0, 9.0, 0);
+      generatorGroup.add(coreLight);
+
+      // 4 Tech pillars around core
+      const pillarOffsets = [-9, 9];
+      pillarOffsets.forEach((ox) => {
+        pillarOffsets.forEach((oz) => {
+          const pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.8, 1.2, 16.0, 12), materials.generator);
+          pillar.position.set(ox, 8.0, oz);
+          pillar.castShadow = true;
+          pillar.receiveShadow = true;
+          generatorGroup.add(pillar);
+
+          const cap = new THREE.Mesh(new THREE.SphereGeometry(1.0, 8, 8), plasmaCoreMat);
+          cap.position.set(ox, 16.0, oz);
+          generatorGroup.add(cap);
+        });
+      });
+
+      ctx.scene.add(generatorGroup);
+      register(ctx, 'building', 0, 0, 24, 24, 0, 0.35, 24.0);
+
+      // Obstacles (outside the center)
       addBarrier(ctx, materials, -15, -100, 0.1);
       addBarrier(ctx, materials, 25, 110, -0.2);
       addBarrier(ctx, materials, -110, 35, Math.PI / 2 + 0.1);
@@ -119,15 +278,20 @@ export const mapRegistry = {
       addCrateStack(ctx, materials, 50, 120);
       addCrateStack(ctx, materials, -150, -100);
       addCrateStack(ctx, materials, 140, 100);
-      addParkedCar(ctx, materials, -40, -25, 0xffc857, Math.PI * 0.5);
+      // Relocate the parked car that was inside the central grid to (-80, -25)
+      addParkedCar(ctx, materials, -80, -25, 0xffc857, Math.PI * 0.5);
       addParkedCar(ctx, materials, 85, 25, 0x5bd3ff, -Math.PI * 0.5);
       addParkedCar(ctx, materials, -125, 125, 0xd4416a, 0.08);
 
-      // Cyber Lamps
-      for (let z = -180; z <= 180; z += 60) addLamp(ctx, materials, -22, z);
-      for (let x = -180; x <= 180; x += 60) addLamp(ctx, materials, x, 22);
+      // Cyber Lamps (skipping the central Hyperdeck and ramp entry zones)
+      for (let z = -180; z <= 180; z += 60) {
+        if (Math.abs(z) > 70) addLamp(ctx, materials, -22, z);
+      }
+      for (let x = -180; x <= 180; x += 60) {
+        if (Math.abs(x) > 70) addLamp(ctx, materials, x, 22);
+      }
 
-      // Speed turbo grids & Jump tiles
+      // Ground turbo & jump tiles (outside central deck)
       addTurboTile(ctx, materials, 0, 95, 0);
       addTurboTile(ctx, materials, 0, -95, Math.PI);
       addTurboTile(ctx, materials, 95, 0, Math.PI / 2);
@@ -137,8 +301,22 @@ export const mapRegistry = {
       addJumpTile(ctx, materials, 130, 0, 0);
       addJumpTile(ctx, materials, -130, 0, 0);
 
-      // Pickups & Temp Turret Weapons!
+      // --- HYPERDECK ELEVATED SPECIAL TILES ---
+      // 4 Speed turbo tiles launching vehicles OUTWARDS off the deck down the ramps
+      addTurboTile(ctx, materials, 0, -56, Math.PI, 8.02); // Launches North down North ramp
+      addTurboTile(ctx, materials, 0, 56, 0, 8.02);       // Launches South down South ramp
+      addTurboTile(ctx, materials, -56, 0, Math.PI * 0.5, 8.02); // Launches West down West ramp
+      addTurboTile(ctx, materials, 56, 0, -Math.PI * 0.5, 8.02); // Launches East down East ramp
+
+      // 4 Jump tiles on the platform roads
+      addJumpTile(ctx, materials, -30, -30, 0, 8.02);
+      addJumpTile(ctx, materials, 30, -30, 0, 8.02);
+      addJumpTile(ctx, materials, -30, 30, 0, 8.02);
+      addJumpTile(ctx, materials, 30, 30, 0, 8.02);
+
+      // Pickups & Temp Turret Weapons
       ctx.pickups.push(
+        // Outer map pickups (untouched)
         { x: -95, z: 0, weapon: 'swarm-missiles' },
         { x: 95, z: 0, weapon: 'rail-slug' },
         { x: 0, z: -95, weapon: 'devastator-nuke' },
@@ -147,26 +325,26 @@ export const mapRegistry = {
         { x: 160, z: -80, weapon: 'boom-missile' },
         { x: -80, z: -160, weapon: 'bouncy-wouncy' },
         { x: 80, z: 160, weapon: 'shock-lance' },
-        { x: 0, z: 0, weapon: 'health-kit' },
-        { x: -60, z: -60, weapon: 'armor-pack' },
-        { x: 60, z: 60, weapon: 'tool-box' },
-        { x: -60, z: 60, weapon: 'speed-booster' },
-        { x: 60, z: -60, weapon: 'health-kit' },
-        
-        // Temp Turret Pickup Enhancements
-        { x: -35, z: -35, weapon: 'turret-hyper-plasma' },
-        { x: 35, z: -35, weapon: 'turret-rail-slugger' },
-        { x: -35, z: 35, weapon: 'turret-shock-beam' },
-        { x: 35, z: 35, weapon: 'turret-magma-spitter' },
         { x: 0, z: 160, weapon: 'turret-flak-barrage' },
-        
-        // Extended roster
         { x: 110, z: 110, weapon: 'phantom-seeker' },
         { x: -110, z: -110, weapon: 'plasma-wraith' },
         { x: -110, z: 110, weapon: 'magma-drone' },
         { x: 110, z: -110, weapon: 'volt-hunter' },
         { x: -140, z: 0, weapon: 'void-stalker' },
-        { x: 140, z: 0, weapon: 'void-stalker' }
+        { x: 140, z: 0, weapon: 'void-stalker' },
+        
+        // --- HYPERDECK ELEVATED PICKUPS (y = 8.9) ---
+        { x: 0, z: 40, y: 8.9, weapon: 'health-kit' },
+        { x: 0, z: -40, y: 8.9, weapon: 'health-kit' },
+        { x: -40, z: 0, y: 8.9, weapon: 'armor-pack' },
+        { x: 40, z: 0, y: 8.9, weapon: 'tool-box' },
+        { x: -30, z: -15, y: 8.9, weapon: 'speed-booster' },
+
+        // Quantum Tower / Generator Symmetrical Turret Pickups on Deck
+        { x: -35, z: -35, y: 8.9, weapon: 'turret-hyper-plasma' },
+        { x: 35, z: -35, y: 8.9, weapon: 'turret-rail-slugger' },
+        { x: -35, z: 35, y: 8.9, weapon: 'turret-shock-beam' },
+        { x: 35, z: 35, y: 8.9, weapon: 'turret-magma-spitter' }
       );
     }
   },

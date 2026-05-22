@@ -104,13 +104,14 @@ export function createPickups(ctx, physics) {
     labelSprite.visible = false;
     group.add(labelSprite);
 
-    group.position.set(pickup.x, 0.9, pickup.z);
+    const y = pickup.y !== undefined ? pickup.y : 0.9;
+    group.position.set(pickup.x, y, pickup.z);
     ctx.scene.add(group);
-    const sensor = physics.createSensorSphere(2.2, pickup.x, 0.9, pickup.z);
+    const sensor = physics.createSensorSphere(2.2, pickup.x, y, pickup.z);
     ctx.ecs.add({
       id: `pickup-${index}`,
       pickup: { weaponId: pickup.weapon, respawn: 0, radius: 2.6 },
-      transform: { x: pickup.x, y: 0.9, z: pickup.z },
+      transform: { x: pickup.x, y, z: pickup.z },
       renderable: { group, glowRing, labelSprite },
       rapierBody: sensor,
     });
@@ -153,7 +154,8 @@ export function updatePickups(ctx, dt) {
     
     if (pickup.renderable.group.visible) {
       pickup.renderable.group.rotation.y += dt * 1.7;
-      pickup.renderable.group.position.y = 0.9 + Math.sin(performance.now() * 0.004) * 0.18;
+      const baseHeight = pickup.transform.y !== undefined ? pickup.transform.y : 0.9;
+      pickup.renderable.group.position.y = baseHeight + Math.sin(performance.now() * 0.004) * 0.18;
       
       const pulse = 1.2 + Math.sin(performance.now() * 0.005) * 0.3;
       if (pickup.renderable.glowRing) pickup.renderable.glowRing.scale.set(pulse, pulse, pulse);
@@ -207,7 +209,13 @@ export function updatePickups(ctx, dt) {
             banner.classList.add('show');
           }
         }
-        pickup.pickup.respawn = 10;
+        if (pickup.pickup.isTemporary) {
+          if (pickup.renderable?.group) ctx.scene.remove(pickup.renderable.group);
+          if (pickup.rapierBody && ctx.physics) ctx.physics.remove(pickup.rapierBody);
+          ctx.ecs.remove(pickup);
+        } else {
+          pickup.pickup.respawn = 10;
+        }
         if (vehicle.score) vehicle.score.weaponsPickedUp = (vehicle.score.weaponsPickedUp || 0) + 1;
         break;
       } else {
@@ -271,7 +279,13 @@ export function updatePickups(ctx, dt) {
              banner.classList.add('show');
            }
         }
-        pickup.pickup.respawn = 10;
+        if (pickup.pickup.isTemporary) {
+          if (pickup.renderable?.group) ctx.scene.remove(pickup.renderable.group);
+          if (pickup.rapierBody && ctx.physics) ctx.physics.remove(pickup.rapierBody);
+          ctx.ecs.remove(pickup);
+        } else {
+          pickup.pickup.respawn = 10;
+        }
         if (vehicle.score) vehicle.score.weaponsPickedUp = (vehicle.score.weaponsPickedUp || 0) + 1;
         break;
       }
@@ -285,4 +299,43 @@ export function clearPickups(ctx, physics) {
     if (entity.rapierBody && physics) physics.remove(entity.rapierBody);
     ctx.ecs.remove(entity);
   }
+}
+
+export function spawnDynamicHealthKit(ctx, physics, x, z) {
+  const weapon = weaponCatalog['health-kit'];
+  if (!weapon) return;
+  
+  const group = new THREE.Group();
+  const material = new THREE.MeshStandardMaterial({ color: weapon.color, emissive: weapon.color, emissiveIntensity: 1.4, metalness: 0.3, roughness: 0.25 });
+  
+  const core = new THREE.Group();
+  const box = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), material);
+  const crossMat = new THREE.MeshStandardMaterial({ color: 0xff0000, emissive: 0xff0000, emissiveIntensity: 1 });
+  const cross1 = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.3, 0.3), crossMat);
+  const cross2 = new THREE.Mesh(new THREE.BoxGeometry(0.3, 1.05, 0.3), crossMat);
+  core.add(box, cross1, cross2);
+  
+  group.add(core);
+  group.scale.set(1.5, 1.5, 1.5);
+  
+  const glowRing = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.05, 8, 32), new THREE.MeshStandardMaterial({ color: weapon.color, emissive: weapon.color, emissiveIntensity: 2.0, transparent: true, opacity: 0.6 }));
+  glowRing.rotation.x = Math.PI / 2;
+  group.add(glowRing);
+
+  const colorHex = `#${weapon.color.toString(16).padStart(6, '0')}`;
+  const labelSprite = createPickupLabel(weapon.name, colorHex);
+  labelSprite.visible = false;
+  group.add(labelSprite);
+
+  group.position.set(x, 0.9, z);
+  ctx.scene.add(group);
+  const sensor = physics.createSensorSphere(2.2, x, 0.9, z);
+  
+  ctx.ecs.add({
+    id: `pickup-temp-${Math.random().toString(36).slice(2)}`,
+    pickup: { weaponId: 'health-kit', respawn: 0, radius: 2.6, isTemporary: true },
+    transform: { x, y: 0.9, z },
+    renderable: { group, glowRing, labelSprite },
+    rapierBody: sensor,
+  });
 }

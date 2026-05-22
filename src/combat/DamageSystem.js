@@ -2,6 +2,8 @@ import { armorMatrix } from '../data/weapons.js';
 import { angleTo, distance2D, forwardFromYaw } from '../core/collision.js';
 import { formatKillLine, pushKillFeed } from '../match/MatchSystem.js';
 import { grantKillReward } from '../core/ProgressionSystem.js';
+import { campaignState } from '../campaign/CampaignSystem.js';
+import { spawnDynamicHealthKit } from '../pickups/PickupSystem.js';
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -156,6 +158,11 @@ export function applyDamage(target, amount, damageType, source, effects, meta = 
     target.health.current = 0;
     target.health.hitFlash = 0;
     target.health.specialHitFlash = 0;
+    
+    // In Custom Matches, dying vehicles have a 50% chance of dropping a Health Kit
+    if (!campaignState.active && target.vehicle && Math.random() < 0.5 && meta.ctx && meta.ctx.physics) {
+      spawnDynamicHealthKit(meta.ctx, meta.ctx.physics, target.transform.x, target.transform.z);
+    }
     if (target.respawn) {
       target.respawn.timer = 3;
       target.respawn.invulnerableTimer = 0;
@@ -224,15 +231,44 @@ export function updateDamageVisuals(ctx, dt) {
     const entity = entities[i];
     if (!entity.health || !entity.renderable) continue;
     if (entity.health.dead || entity.renderable.group?.visible === false) continue;
-    if (entity.health.hitFlash <= 0 && (!entity.health.specialHitFlash || entity.health.specialHitFlash <= 0)) continue;
-    entity.health.hitFlash = Math.max(0, entity.health.hitFlash - dt);
-    if (entity.health.specialHitFlash !== undefined) {
+
+    const isInvulnerable = entity.respawn?.invulnerableTimer > 0;
+
+    // Decrement hit flash timers
+    if (entity.health.hitFlash > 0) {
+      entity.health.hitFlash = Math.max(0, entity.health.hitFlash - dt);
+    }
+    if (entity.health.specialHitFlash > 0) {
       entity.health.specialHitFlash = Math.max(0, entity.health.specialHitFlash - dt);
     }
+
     if (entity.health.hitFlash > 0) {
       const mats = getFlashMaterials(entity.renderable);
       for (let j = 0; j < mats.length; j += 1) {
         mats[j].emissiveIntensity = Math.max(mats[j].emissiveIntensity, 0.5);
+      }
+    } else if (isInvulnerable) {
+      const time = performance.now() * 0.005;
+      const intensity = 0.6 + Math.sin(time * 12) * 0.4; // rapid pulsing cyan glow
+      const mats = getFlashMaterials(entity.renderable);
+      for (let j = 0; j < mats.length; j += 1) {
+        if (!mats[j]._origEmissive) {
+          mats[j]._origEmissive = mats[j].emissive.clone();
+          mats[j]._origEmissiveIntensity = mats[j].emissiveIntensity;
+        }
+        mats[j].emissive.setHex(0x00ffff);
+        mats[j].emissiveIntensity = intensity;
+      }
+    } else {
+      // Restore original emissive parameters if cached
+      const mats = getFlashMaterials(entity.renderable);
+      for (let j = 0; j < mats.length; j += 1) {
+        if (mats[j]._origEmissive) {
+          mats[j].emissive.copy(mats[j]._origEmissive);
+          mats[j].emissiveIntensity = mats[j]._origEmissiveIntensity;
+          delete mats[j]._origEmissive;
+          delete mats[j]._origEmissiveIntensity;
+        }
       }
     }
   }

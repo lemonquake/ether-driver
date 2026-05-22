@@ -79,12 +79,12 @@ export function addRamp(ctx, materials, x, z, w, d, yaw, hStart, hEnd) {
   ctx.minimapObjects.push({ type: 'ramp', x, z, w, d, r: yaw });
 }
 
-export function addRoad(ctx, materials, x, z, w, d) {
+export function addRoad(ctx, materials, x, z, w, d, y = 0.02) {
   const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, 0.08, d), materials.asphalt);
-  mesh.position.set(x, 0.02, z);
+  mesh.position.set(x, y, z);
   mesh.receiveShadow = true;
   (ctx.mapGroup || ctx.scene).add(mesh);
-  ctx.roads.push({ x, z, w, d });
+  ctx.roads.push({ x, z, w, d, y });
 }
 
 export function addBuilding(ctx, materials, x, z, w, h, d, material, collisionHeight = 0) {
@@ -462,7 +462,7 @@ export function addTeslaCoil(ctx, x, z, height, materials) {
   register(ctx, 'building', x, z, 5.0, 5.0);
 }
 
-export function addTurboTile(ctx, materials, x, z, yaw) {
+export function addTurboTile(ctx, materials, x, z, yaw, y = 0.02) {
   const group = new THREE.Group();
   
   const base = new THREE.Mesh(new THREE.BoxGeometry(6, 0.1, 8), materials.concrete);
@@ -479,15 +479,15 @@ export function addTurboTile(ctx, materials, x, z, yaw) {
 
   group.add(arrow1, arrow2);
   
-  group.position.set(x, 0.02, z);
+  group.position.set(x, y, z);
   group.rotation.y = yaw;
   (ctx.mapGroup || ctx.scene).add(group);
   
   if (!ctx.specialTiles) ctx.specialTiles = [];
-  ctx.specialTiles.push({ type: 'turbo', x, z, w: 6, d: 8, yaw, mesh: group, glowMat, animOffset: Math.random() * Math.PI });
+  ctx.specialTiles.push({ type: 'turbo', x, y, z, w: 6, d: 8, yaw, mesh: group, glowMat, animOffset: Math.random() * Math.PI });
 }
 
-export function addJumpTile(ctx, materials, x, z, yaw) {
+export function addJumpTile(ctx, materials, x, z, yaw, y = 0.02) {
   const group = new THREE.Group();
   
   const base = new THREE.Mesh(new THREE.BoxGeometry(6, 0.1, 6), materials.concrete);
@@ -504,12 +504,12 @@ export function addJumpTile(ctx, materials, x, z, yaw) {
 
   group.add(circle, core);
 
-  group.position.set(x, 0.02, z);
+  group.position.set(x, y, z);
   group.rotation.y = yaw;
   (ctx.mapGroup || ctx.scene).add(group);
   
   if (!ctx.specialTiles) ctx.specialTiles = [];
-  ctx.specialTiles.push({ type: 'jump', x, z, w: 6, d: 6, yaw, mesh: group, glowMat, animOffset: Math.random() * Math.PI });
+  ctx.specialTiles.push({ type: 'jump', x, y, z, w: 6, d: 6, yaw, mesh: group, glowMat, animOffset: Math.random() * Math.PI });
 }
 
 export function buildMap(ctx, materials) {

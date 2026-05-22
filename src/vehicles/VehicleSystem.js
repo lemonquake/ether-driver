@@ -215,30 +215,33 @@ export function updateVehicles(ctx, dt, effects) {
       }
     }
 
-    if (ctx.specialTiles && transform.y < 1) {
+    if (ctx.specialTiles) {
       for (const tile of ctx.specialTiles) {
-        if (Math.abs(transform.x - tile.x) < tile.w / 2 + 1 && Math.abs(transform.z - tile.z) < tile.d / 2 + 1) {
-          if (tile.type === 'turbo') {
-            velocity.speed = Math.max(velocity.speed, 98);
-            transform.yaw = wrapAngle(tile.yaw + Math.PI);
-            velocity.steer = 0;
-            if (Math.random() < 0.2) effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 3);
-            if (entity.score && !entity._lastTurboTile) {
-              if (!entity.score.specialFloorUses) entity.score.specialFloorUses = { turbo: 0, jump: 0 };
-              entity.score.specialFloorUses.turbo += 1;
-            }
-            entity._lastTurboTile = 0.5;
-          } else if (tile.type === 'jump') {
-            if (velocity.y <= 0) {
-              velocity.y = 35;
-              effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 15);
-              effects.emitExplosion(transform.x, transform.z, 3.5, 16, 'plasma');
-              if (isPlayer) {
-                ctx.cameraEffects?.add(0.12);
-              }
-              if (entity.score) {
+        const tileY = tile.y !== undefined ? tile.y : 0.02;
+        if (Math.abs(transform.y - tileY) < 2.0) {
+          if (Math.abs(transform.x - tile.x) < tile.w / 2 + 1 && Math.abs(transform.z - tile.z) < tile.d / 2 + 1) {
+            if (tile.type === 'turbo') {
+              velocity.speed = Math.max(velocity.speed, 98);
+              transform.yaw = wrapAngle(tile.yaw + Math.PI);
+              velocity.steer = 0;
+              if (Math.random() < 0.2) effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 3);
+              if (entity.score && !entity._lastTurboTile) {
                 if (!entity.score.specialFloorUses) entity.score.specialFloorUses = { turbo: 0, jump: 0 };
-                entity.score.specialFloorUses.jump += 1;
+                entity.score.specialFloorUses.turbo += 1;
+              }
+              entity._lastTurboTile = 0.5;
+            } else if (tile.type === 'jump') {
+              if (velocity.y <= 0) {
+                velocity.y = 35;
+                effects.emitImpact(transform.x, transform.z, { x: 0, z: 1 }, 15);
+                effects.emitExplosion(transform.x, transform.z, 3.5, 16, 'plasma');
+                if (isPlayer) {
+                  ctx.cameraEffects?.add(0.12);
+                }
+                if (entity.score) {
+                  if (!entity.score.specialFloorUses) entity.score.specialFloorUses = { turbo: 0, jump: 0 };
+                  entity.score.specialFloorUses.jump += 1;
+                }
               }
             }
           }

@@ -91,6 +91,26 @@ export function createMaterials(renderer) {
     }
   }, 2, 4);
 
+  const textureLoader = new THREE.TextureLoader();
+
+  const hyperdeckTex = textureLoader.load('./textures/hyperdeck_grid.png');
+  hyperdeckTex.wrapS = THREE.RepeatWrapping;
+  hyperdeckTex.wrapT = THREE.RepeatWrapping;
+  hyperdeckTex.repeat.set(12, 12);
+  hyperdeckTex.colorSpace = THREE.SRGBColorSpace;
+
+  const generatorTex = textureLoader.load('./textures/generator_core.png');
+  generatorTex.wrapS = THREE.RepeatWrapping;
+  generatorTex.wrapT = THREE.RepeatWrapping;
+  generatorTex.repeat.set(4, 4);
+  generatorTex.colorSpace = THREE.SRGBColorSpace;
+
+  const towerTex = textureLoader.load('./textures/tower_plating.png');
+  towerTex.wrapS = THREE.RepeatWrapping;
+  towerTex.wrapT = THREE.RepeatWrapping;
+  towerTex.repeat.set(2, 4);
+  towerTex.colorSpace = THREE.SRGBColorSpace;
+
   return {
     asphalt: new THREE.MeshStandardMaterial({ map: asphalt, roughness: 0.72, metalness: 0.03 }),
     grass: new THREE.MeshStandardMaterial({ map: grass, roughness: 0.92 }),
@@ -108,5 +128,26 @@ export function createMaterials(renderer) {
     lamp: new THREE.MeshStandardMaterial({ color: 0x1a2024, roughness: 0.42, metalness: 0.7 }),
     light: new THREE.MeshStandardMaterial({ color: 0xfff2c4, emissive: 0xffcf77, emissiveIntensity: 1.7 }),
     hazard: new THREE.MeshStandardMaterial({ color: 0xff6545, roughness: 0.5, metalness: 0.1 }),
+    hyperdeck: new THREE.MeshStandardMaterial({
+      map: hyperdeckTex,
+      roughness: 0.18,
+      metalness: 0.85,
+      emissive: new THREE.Color(0x00d4ff),
+      emissiveIntensity: 0.2
+    }),
+    generator: new THREE.MeshStandardMaterial({
+      map: generatorTex,
+      roughness: 0.22,
+      metalness: 0.75,
+      emissive: new THREE.Color(0xff00b7),
+      emissiveIntensity: 0.25
+    }),
+    tower: new THREE.MeshStandardMaterial({
+      map: towerTex,
+      roughness: 0.24,
+      metalness: 0.82,
+      emissive: new THREE.Color(0x00ffaa),
+      emissiveIntensity: 0.18
+    }),
   };
 }

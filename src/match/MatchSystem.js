@@ -153,6 +153,9 @@ export function startMatch(ctx, materials, options, physics) {
       const vehicleSpec = isPlayer && options.playerBlueprint ? options.playerBlueprint : generateRandomBlueprint();
       const entity = createVehicleEntity(ctx, materials, vehicleSpec, spawn, spawn.yaw, isPlayer ? 'player' : 'ai');
       entity.respawn.baseId = team.baseId;
+      if (!ctx.match.isCampaign) {
+        entity.respawn.invulnerableTimer = 8.0;
+      }
       setupScore(entity, isPlayer ? ctx.match.playerName : randomName(ctx.match.nextName++), team);
       if (isPlayer) ctx.player = entity;
       else attachAI(entity, aiIndex++, ctx);
@@ -174,7 +177,7 @@ export function pushKillFeed(ctx, line, color = '#82ffcf') {
   ctx.match.killBannerQueue = ctx.match.killBannerQueue.slice(-6);
 }
 
-function resetVehicleAtSpawn(entity, spawn) {
+function resetVehicleAtSpawn(entity, spawn, ctx) {
   entity.transform.x = spawn.x;
   entity.transform.z = spawn.z;
   entity.transform.yaw = spawn.yaw;
@@ -186,7 +189,7 @@ function resetVehicleAtSpawn(entity, spawn) {
   entity.health.hitFlash = 0;
   entity.health.specialHitFlash = 0;
   entity.respawn.timer = 0;
-  entity.respawn.invulnerableTimer = 1.25;
+  entity.respawn.invulnerableTimer = (ctx && !ctx.match?.isCampaign) ? 8.0 : 1.25;
   entity.stability.pitch = 0;
   entity.stability.roll = 0;
   entity.stability.angularPitch = 0;
@@ -216,7 +219,7 @@ function updateRespawns(ctx, dt) {
     const base = findBaseForTeam(ctx, entity.teamId);
     const spawnIndex = (entity.score?.deaths || 0) % (base?.spawnPoints?.length || 1);
     const spawn = base?.spawnPoints?.[spawnIndex] || { x: 0, z: 0, yaw: 0 };
-    resetVehicleAtSpawn(entity, spawn);
+    resetVehicleAtSpawn(entity, spawn, ctx);
   }
 }
 
