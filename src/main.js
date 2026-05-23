@@ -133,24 +133,34 @@ setupTeams.forEach((team) => {
 
 let selectedMapId = 'city';
 
-function rebuildGameMap(mapId) {
+async function rebuildGameMap(mapId, onProgress) {
   ctx.activeMapId = mapId;
+  
+  if (onProgress) await onProgress(5, 'ESTABLISHING TACTICAL CONNECTION...');
+  
   // 1. Traverse and dispose old map assets inside mapGroup to prevent memory leaks
   if (ctx.mapGroup) {
     ctx.mapGroup.traverse((object) => {
       if (object.isMesh) {
-        if (object.geometry) object.geometry.dispose();
+        if (object.geometry && !object.geometry.isShared) {
+          object.geometry.dispose();
+        }
         if (object.material) {
           if (Array.isArray(object.material)) {
-            object.material.forEach((mat) => mat.dispose());
+            object.material.forEach((mat) => {
+              if (!mat.isShared) mat.dispose();
+            });
           } else {
-            object.material.dispose();
+            if (!object.material.isShared) object.material.dispose();
           }
         }
       }
     });
     ctx.scene.remove(ctx.mapGroup);
   }
+
+  if (onProgress) await onProgress(15, 'DEALLOCATING GRID SYSTEMS...');
+  await new Promise(resolve => setTimeout(resolve, 0));
 
   // 2. Setup fresh map group container
   ctx.mapGroup = new THREE.Group();
@@ -178,6 +188,9 @@ function rebuildGameMap(mapId) {
     }
   };
 
+  if (onProgress) await onProgress(30, 'MAPPING PERIMETER HIGHWAYS...');
+  await new Promise(resolve => setTimeout(resolve, 0));
+
   // 5. Build selected map
   const mapData = mapRegistry[mapId] || mapRegistry.city;
   mapData.build(ctx, materials);
@@ -185,9 +198,15 @@ function rebuildGameMap(mapId) {
   // Restore scene.add
   ctx.scene.add = originalSceneAdd;
 
+  if (onProgress) await onProgress(55, 'CONSTRUCTING HEAVY DEFENSES...');
+  await new Promise(resolve => setTimeout(resolve, 0));
+
   // 6. Generate pathfinding grid and spawn pickup physical sensors
   ctx.navigation = generateNavigationGraph(ctx);
   createPickups(ctx, physics);
+
+  if (onProgress) await onProgress(70, 'SYNCHRONIZING PATHFINDING NEURONS...');
+  await new Promise(resolve => setTimeout(resolve, 0));
 
   // 7. Tune shadow-casting directional lights for soft, high-quality shadows
   ctx.scene.traverse((node) => {
@@ -203,6 +222,9 @@ function rebuildGameMap(mapId) {
       node.shadow.needsUpdate = true;
     }
   });
+
+  if (onProgress) await onProgress(80, 'STABILIZING ELECTROMAGNETIC FOG...');
+  await new Promise(resolve => setTimeout(resolve, 0));
 
   // 8. Generate dynamic PMREM reflection environment map & high-fidelity custom skybox backgrounds
   if (ctx.scene.background && ctx.scene.background.dispose) {
@@ -460,7 +482,7 @@ function rebuildGameMap(mapId) {
     skyCtx.arc(sx, sy, sr, 0, Math.PI * 2);
     skyCtx.fill();
 
-    // Magma solar flares (wavy horizontal dark plumes)
+    // Wavy horizontal dark plumes
     skyCtx.fillStyle = 'rgba(20, 4, 0, 0.72)'; // Dark ash plumes
     for (let i = 0; i < 6; i++) {
       const py = sy - sr * 0.7 + Math.random() * sr * 1.4;
@@ -696,6 +718,9 @@ function rebuildGameMap(mapId) {
   skyTexture.colorSpace = THREE.SRGBColorSpace;
   ctx.scene.background = skyTexture;
 
+  if (onProgress) await onProgress(90, 'COMPILING SKY DE DIAGNOSTICS...');
+  await new Promise(resolve => setTimeout(resolve, 0));
+
   // C. Create PMREM Environment reflection texture using the blurred reflections gradient canvas
   const pmremGenerator = new THREE.PMREMGenerator(ctx.renderer);
   pmremGenerator.compileEquirectangularShader();
@@ -708,6 +733,9 @@ function rebuildGameMap(mapId) {
   // Clean up textures and generators to prevent memory leaks
   envTexture.dispose();
   pmremGenerator.dispose();
+
+  if (onProgress) await onProgress(95, 'PRE-COMPILING GRAPHICS SHADERS...');
+  await new Promise(resolve => setTimeout(resolve, 0));
 
   // 9. Pre-allocate projectile PointLights & Meshes pool to completely eliminate real-time WebGL shader recompilation and mesh instantiation lag
   if (ctx.projectileLightPool) {
@@ -744,6 +772,8 @@ function rebuildGameMap(mapId) {
     ctx.scene.add(mesh);
     ctx.projectileMeshPool.push(mesh);
   }
+
+  if (onProgress) await onProgress(100, 'SYSTEM ONLINE. LINK ESTABLISHED.');
 }
 
 // --- Map Blueprint Drawings & Radar Sweeps ---
@@ -1283,10 +1313,40 @@ function animateRadars() {
   });
 }
 
-rebuildGameMap(selectedMapId);
-drawMapBlueprints();
-animateRadars();
-routeRecorder = createRouteRecorder(ctx, document.querySelector('#recordRouteButton'));
+// Start initial boot map rebuild asynchronously
+(async () => {
+  const loader = document.getElementById('loadingScreen');
+  const bar = document.getElementById('loadingProgressBar');
+  const status = document.getElementById('loadingStatusText');
+  const consoleLines = document.querySelectorAll('.loading-details-console .console-line');
+
+  const updateBootProgress = async (pct, msg) => {
+    if (bar) bar.style.width = pct + '%';
+    if (status) status.textContent = msg;
+    if (consoleLines.length >= 4) {
+      if (pct >= 15) consoleLines[0].textContent = 'SYS_LOAD: RAPIER_3D COMPATIBLE PHYSICS... OK';
+      if (pct >= 55) consoleLines[1].textContent = 'SYS_LOAD: THREE_JS WEBGL RENDERER... OK';
+      if (pct >= 70) consoleLines[2].textContent = 'SYS_LOAD: ASSET ENGINE INITIALIZED... OK';
+      if (pct >= 95) consoleLines[3].textContent = 'SYS_LOAD: SHADER COMPILATION RUNNING... OK';
+    }
+    // Yield to browser
+    await new Promise((resolve) => setTimeout(resolve, 15));
+  };
+
+  await rebuildGameMap(selectedMapId, updateBootProgress);
+  drawMapBlueprints();
+  animateRadars();
+  routeRecorder = createRouteRecorder(ctx, document.querySelector('#recordRouteButton'));
+
+  // Smooth fade-out of the loading screen
+  if (loader) {
+    loader.style.transition = 'opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+    loader.style.opacity = '0';
+    setTimeout(() => {
+      loader.classList.add('hidden');
+    }, 600);
+  }
+})();
 
 function esc(value) {
   return String(value)
@@ -2400,7 +2460,10 @@ async function executeMatchStartSequence(isCampaign) {
   const status = document.getElementById('loadingStatusText');
   const consoleLines = document.querySelectorAll('.loading-details-console .console-line');
   
-  if (loader) loader.classList.remove('hidden');
+  if (loader) {
+    loader.style.opacity = '1';
+    loader.classList.remove('hidden');
+  }
   if (bar) bar.style.width = '0%';
   if (status) status.textContent = 'ESTABLISHING TACTICAL CONNECTION...';
   
@@ -2426,8 +2489,11 @@ async function executeMatchStartSequence(isCampaign) {
 
   // Rebuild the map geometry
   const mapId = isCampaign ? 'campaign_1' : selectedMapId;
-  rebuildGameMap(mapId);
-  await updateProgress(35, 'COMPILING COLLISION BOUNDARIES...', 1, 'SYS_LOAD: PHYSICAL STRUCTURES MAPPED... OK');
+  await rebuildGameMap(mapId, async (pct, msg) => {
+    // Map building progress goes from 15% to 65% on the main progress bar
+    const loaderPct = 15 + Math.round(pct * 0.5); 
+    await updateProgress(loaderPct, msg, 1, `SYS_LOAD: BUILD PROGRESS... ${Math.round(pct)}%`);
+  });
 
   // Start the match
   if (isCampaign) {
@@ -2485,26 +2551,30 @@ async function executeMatchStartSequence(isCampaign) {
   // Position camera correctly behind the player
   updateCamera(0.016);
 
-  // Compile shaders
+  // Compile shaders in the background so it doesn't block the UI thread/loading screen
   await updateProgress(85, 'PRE-COMPILING GRAPHICS SHADERS...', 3, 'SYS_LOAD: SHADER PIPELINES PRE-COMPILED... COMPILING');
-  try {
-    await ctx.renderer.compileAsync(ctx.scene, ctx.camera);
-  } catch (err) {
-    console.warn('compileAsync failed, using synchronous compile fallback', err);
+  ctx.renderer.compileAsync(ctx.scene, ctx.camera).catch((err) => {
+    console.warn('Background compileAsync failed, using synchronous compile fallback', err);
     try {
       ctx.renderer.compile(ctx.scene, ctx.camera);
     } catch (fallbackErr) {
-      console.warn('Synchronous compile fallback also failed, continuing game loop anyway', fallbackErr);
+      console.warn('Synchronous compile fallback also failed', fallbackErr);
     }
-  }
+  });
 
   await updateProgress(100, 'TACTICAL LINK ESTABLISHED. READY TO DEPLOY.', 3, 'SYS_LOAD: SHADER PIPELINES PRE-COMPILED... OK');
 
   // Extra brief pause at 100% for aesthetic pacing
   await new Promise((resolve) => setTimeout(resolve, 300));
 
-  // Hide UI overlays
-  if (loader) loader.classList.add('hidden');
+  // Hide UI overlays with a smooth fade-out matching the boot sequence
+  if (loader) {
+    loader.style.transition = 'opacity 0.6s cubic-bezier(0.16, 1, 0.3, 1)';
+    loader.style.opacity = '0';
+    setTimeout(() => {
+      loader.classList.add('hidden');
+    }, 600);
+  }
   ui.matchMenu.classList.add('hidden');
   ui.resultsOverlay.classList.remove('visible');
   
@@ -3562,7 +3632,12 @@ document.querySelector('.map-tab-list')?.addEventListener('click', (event) => {
     p.classList.toggle('selected', p.dataset.detailMap === selectedMapId);
   });
   
-  rebuildGameMap(selectedMapId);
+  const currentBuildMapId = selectedMapId;
+  setTimeout(async () => {
+    if (selectedMapId === currentBuildMapId) {
+      await rebuildGameMap(selectedMapId);
+    }
+  }, 50);
 });
 
 function togglePauseMenu(show) {
@@ -3984,7 +4059,9 @@ function animate() {
     });
   }
 
-  routeRecorder.update(dt);
+  if (routeRecorder) {
+    routeRecorder.update(dt);
+  }
   effects.update(dt);
   updateGaragePreview(dt);
   buildPreviewManager.update(dt);

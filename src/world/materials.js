@@ -111,7 +111,7 @@ export function createMaterials(renderer) {
   towerTex.repeat.set(2, 4);
   towerTex.colorSpace = THREE.SRGBColorSpace;
 
-  return {
+  const mats = {
     asphalt: new THREE.MeshStandardMaterial({ map: asphalt, roughness: 0.72, metalness: 0.03 }),
     grass: new THREE.MeshStandardMaterial({ map: grass, roughness: 0.92 }),
     concrete: new THREE.MeshStandardMaterial({ map: concrete, roughness: 0.84 }),
@@ -150,4 +150,10 @@ export function createMaterials(renderer) {
       emissiveIntensity: 0.18
     }),
   };
+
+  Object.values(mats).forEach((mat) => {
+    mat.isShared = true;
+  });
+
+  return mats;
 }

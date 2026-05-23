@@ -636,24 +636,66 @@
         </div>
       </section>
       <!-- GAMEPLAY LOADING SCREEN -->
-      <section id="loadingScreen" class="loading-screen hidden" aria-label="Loading Game">
+      <section id="loadingScreen" class="loading-screen" aria-label="Loading Game">
+        <!-- Ambient background elements -->
+        <div class="loading-bg-image"></div>
+        <div class="loading-grid-overlay"></div>
         <div class="loading-scanlines"></div>
+        <div class="loading-glow"></div>
+        
+        <!-- Corner brackets -->
+        <div class="loading-bracket top-left"></div>
+        <div class="loading-bracket top-right"></div>
+        <div class="loading-bracket bottom-left"></div>
+        <div class="loading-bracket bottom-right"></div>
+        
+        <!-- Side HUD widgets for high-tech telemetry details -->
+        <aside class="loading-hud-left" aria-hidden="true">
+          <div class="hud-item"><span class="kicker">SYSTEM STATE:</span> <b>DIAGNOSTIC</b></div>
+          <div class="hud-item"><span class="kicker">NEURAL SYNC:</span> <b>98.4%</b></div>
+          <div class="hud-item"><span class="kicker">CORES ACTIVE:</span> <b>8 / 8</b></div>
+          <div class="hud-item"><span class="kicker">PHYS ENGINE:</span> <b>RAPIER_3D</b></div>
+        </aside>
+        
+        <aside class="loading-hud-right" aria-hidden="true">
+          <div class="hud-item"><span class="kicker">OPERATION:</span> <b>ETHER SHIELD</b></div>
+          <div class="hud-item"><span class="kicker">ARENA REF:</span> <b>GRID_SEC_04</b></div>
+          <div class="hud-item"><span class="kicker">WEAPONRY:</span> <b>LOADED</b></div>
+          <div class="hud-item"><span class="kicker">REACTION:</span> <b>STABLE</b></div>
+        </aside>
+        
+        <!-- Central loading panel -->
         <div class="loading-container">
+          <!-- Cyber Decoration Corners -->
+          <div class="container-corner top-left"></div>
+          <div class="container-corner top-right"></div>
+          <div class="container-corner bottom-left"></div>
+          <div class="container-corner bottom-right"></div>
+
           <div class="loading-brand">
-            <h2 class="loading-title">INITIALIZING</h2>
-            <p class="loading-subtitle">// ESTABLISHING CONNECTION TO NEURAL LINK</p>
+            <span class="loading-brand-kicker">// TACTICAL INTERFACE ENGAGED</span>
+            <h1 class="loading-brand-title" data-text="ETHER DRIVER">ETHER DRIVER</h1>
+            <p class="loading-subtitle">INITIALIZING NEURAL DRIVE SYSTEMS...</p>
           </div>
+          
           <div class="loading-bar-wrapper">
             <div id="loadingProgressBar" class="loading-progress-bar" style="width: 0%;"></div>
             <div class="loading-bar-glitch"></div>
           </div>
-          <div id="loadingStatusText" class="loading-status-text">CONNECTING TO SECURITIES NETWORK...</div>
+          
+          <div id="loadingStatusText" class="loading-status-text">ESTABLISHING CONNECTION TO NEURAL LINK...</div>
+          
           <div class="loading-details-console">
-            <span class="console-line">SYS_LOAD: RAPIER_3D COMPATIBLE PHYSICS... OK</span>
-            <span class="console-line">SYS_LOAD: THREE_JS WEBGL RENDERER... OK</span>
-            <span class="console-line">SYS_LOAD: ASSET ENGINE INITIALIZED... OK</span>
-            <span class="console-line">SYS_LOAD: SHADER COMPILATION RUNNING... ACTIVE</span>
+            <span class="console-line">SYS_LOAD: RAPIER_3D COMPATIBLE PHYSICS... PENDING</span>
+            <span class="console-line">SYS_LOAD: THREE_JS WEBGL RENDERER... PENDING</span>
+            <span class="console-line">SYS_LOAD: ASSET ENGINE INITIALIZED... PENDING</span>
+            <span class="console-line">SYS_LOAD: SHADER COMPILATION RUNNING... PENDING</span>
           </div>
+        </div>
+        
+        <!-- Bottom alert ticker -->
+        <div class="loading-ticker">
+          <span>WARNING: COMBAT ARENA IS UNDER STRICT MILITARY AUTOMATION GRID CHECKPOINT LOCKDOWN // AVOID ACID POOLS & LAVA SECTORS</span>
         </div>
       </section>
 
